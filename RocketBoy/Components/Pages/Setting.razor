@@ -1,0 +1,13 @@
+@page "/settings"
+<div class="container mt-5">
+    <h3>Settings</h3>
+    <div class="mb-3">
+        <label for="requestLocation" class="form-label">Requests Save Location</label>
+        <InputText id="requestLocation" @bind-Value="Settings.RequestsSaveLocation" class="form-control" />
+    </div>
+    <div class="mb-3">
+        <label for="collectionLocation" class="form-label">Collections Save Location</label>
+        <InputText id="collectionLocation" @bind-Value="Settings.CollectionsSaveLocation" class="form-control" />
+    </div>
+    <button class="btn btn-primary" @onclick="SaveSettings">Save</button>
+</div>

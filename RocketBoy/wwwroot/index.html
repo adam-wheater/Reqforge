@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>RocketBoy</title>
+    <base href="/" />
+    <link rel="stylesheet" href="css/bootstrap/bootstrap.min.css" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <link rel="stylesheet" href="css/app.css" />
+    <link rel="stylesheet" href="RocketBoy.styles.css" />
+    <link rel="icon" type="image/png" href="favicon.png" />
+</head>
+
+<body>
+
+    <div class="status-bar-safe-area"></div>
+
+    <div id="app">Loading...</div>
+
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="" class="reload">Reload</a>
+        <a class="dismiss">🗙</a>
+    </div>
+
+    <script src="_framework/blazor.webview.js" autostart="false"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    <script src="js/saveHandler.js"></script>
+    <script src="js/k6_test_template.js"></script>
+    <script src="js/openAPIFileSave.js"></script>
+    <script src="js/saveAs.js"></script>
+
+    <script>
+        function confirmCloseTab(message) {
+            return confirm(message);
+        }
+    </script>
+
+</body>
+
+</html>

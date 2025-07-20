@@ -1,0 +1,52 @@
+﻿@inherits LayoutComponentBase
+
+<div class="page">
+    <div class="sidebar">
+        <ul class="nav nav-pills flex-column mb-auto">
+            <li class="nav-item">
+                <a href="/" class="nav-link active" aria-current="page">
+                    <svg class="bi pe-none me-2" width="16" height="16"><use xlink:href="#home"></use></svg>
+                    Home
+                </a>
+            </li>
+            <li>
+                <a href="/keystore" class="nav-link text-white">
+                    <svg class="bi pe-none me-2" width="16" height="16"><use xlink:href="#key"></use></svg>
+                    Manage Keystore
+                </a>
+            </li>
+            <li>
+                <a href="/settings" class="nav-link text-white">
+                    <svg class="bi pe-none me-2" width="16" height="16"><use xlink:href="#cog"></use></svg>
+                    Settings
+                </a>
+            </li>
+        </ul>
+    </div>
+    <div class="content">
+        @Body
+    </div>
+</div>
+
+<style>
+    .page {
+        display: flex;
+        height: 100vh;
+    }
+
+    .sidebar {
+        width: 280px;
+        background-color: #343a40;
+        color: white;
+        flex-shrink: 0;
+        overflow-y: auto;
+        padding-left: 20px;
+        padding-top: 20px;
+    }
+
+    .content {
+        flex-grow: 1;
+        overflow-y: auto;
+        padding: 1rem;
+    }
+</style>
