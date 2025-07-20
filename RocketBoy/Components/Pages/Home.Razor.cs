@@ -51,7 +51,9 @@ namespace RocketBoy.Components.Pages
             ZapApiKey = KeystoreService.GetKey("ZapApiKey") ?? string.Empty;
             ZapBaseUrl = KeystoreService.GetKey("ZapBaseUrl") ?? string.Empty;
 
-            Settings = await SettingsService.LoadSettingsAsync() ?? new Settings();
+            Settings = await SettingsService.LoadSettingsAsync();
+            ShowDefaultHeaders = Settings.ShowDefaultHeaders;
+            ShowLoadTestDialog = Settings.ShowLoadTestDialog;
 
             if (OpenedTabs == null || OpenedTabs.Count == 0) { NewTab(); }
         }
@@ -401,6 +403,20 @@ namespace RocketBoy.Components.Pages
 
             HttpClient httpClient = new();
             var zapService = new ZapService(new ZapSettings { ApiKey = zapApiKey, BaseUrl = zapBaseUrl });
+
+            try
+            {
+                var version = await zapService.GetVersion(httpClient);
+                Console.WriteLine($"Detected ZAP version {version}");
+            }
+            catch
+            {
+                await JSRuntime.InvokeVoidAsync("alert",
+                    "Unable to contact OWASP ZAP at " + zapBaseUrl +
+                    ".\n\nPlease make sure OWASP ZAP is installed and running (download from https://www.zaproxy.org/download/).");
+                SecurityTestInProgress = false;
+                return;
+            }
 
             try
             {

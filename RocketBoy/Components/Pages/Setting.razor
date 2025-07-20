@@ -1,13 +1,46 @@
 @page "/settings"
-<div class="container mt-5">
-    <h3>Settings</h3>
+@using RocketBoy.Models
+
+<EditForm Model="Settings" OnValidSubmit="@SaveSettings">
     <div class="mb-3">
-        <label for="requestLocation" class="form-label">Requests Save Location</label>
-        <InputText id="requestLocation" @bind-Value="Settings.RequestsSaveLocation" class="form-control" />
+        <label for="RequestsSaveLocation" class="form-label">Requests Save Location</label>
+        <InputText id="RequestsSaveLocation" class="form-control" @bind-Value="Settings.RequestsSaveLocation" />
     </div>
+
     <div class="mb-3">
-        <label for="collectionLocation" class="form-label">Collections Save Location</label>
-        <InputText id="collectionLocation" @bind-Value="Settings.CollectionsSaveLocation" class="form-control" />
+        <label for="CollectionsSaveLocation" class="form-label">Collections Save Location</label>
+        <InputText id="CollectionsSaveLocation" class="form-control" @bind-Value="Settings.CollectionsSaveLocation" />
     </div>
-    <button class="btn btn-primary" @onclick="SaveSettings">Save</button>
-</div>
+
+    <div class="form-check mb-3">
+        <InputCheckbox id="ShowDefaultHeaders" class="form-check-input" @bind-Value="Settings.ShowDefaultHeaders" />
+        <label for="ShowDefaultHeaders" class="form-check-label">Show Default Headers</label>
+    </div>
+
+    <div class="mb-3">
+        <label for="DefaultVirtualUsers" class="form-label">Default Virtual Users</label>
+        <InputNumber id="DefaultVirtualUsers" class="form-control" @bind-Value="Settings.DefaultVirtualUsers" />
+    </div>
+
+    <div class="mb-3">
+        <label for="DefaultLoadTestDuration" class="form-label">Default Load Test Duration</label>
+        <InputText id="DefaultLoadTestDuration" class="form-control" @bind-Value="Settings.DefaultLoadTestDuration" />
+    </div>
+
+    <div class="mb-3">
+        <label for="OpenApiTitle" class="form-label">OpenAPI Title</label>
+        <InputText id="OpenApiTitle" class="form-control" @bind-Value="Settings.OpenApiTitle" />
+    </div>
+
+    <div class="mb-3">
+        <label for="OpenApiVersion" class="form-label">OpenAPI Version</label>
+        <InputText id="OpenApiVersion" class="form-control" @bind-Value="Settings.OpenApiVersion" />
+    </div>
+
+    <div class="mb-3">
+        <label for="OpenApiDescription" class="form-label">OpenAPI Description</label>
+        <InputText id="OpenApiDescription" class="form-control" @bind-Value="Settings.OpenApiDescription" />
+    </div>
+
+    <button type="submit" class="btn btn-primary">Save</button>
+</EditForm>

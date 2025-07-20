@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
+using RocketBoy.Models;
 using RocketBoy.Services;
 
 namespace RocketBoy.Components.Pages
@@ -8,11 +9,11 @@ namespace RocketBoy.Components.Pages
     {
         [Inject] public IJSRuntime JSRuntime { get; set; }
         [Inject] public SettingsService SettingsService { get; set; }
-        public Settings Settings { get; set; } = new Settings();
+        private Settings Settings { get; set; } = new Settings();
 
         protected override async Task OnInitializedAsync()
         {
-            Settings = await SettingsService.LoadSettingsAsync() ?? new Settings();
+            Settings = await SettingsService.LoadSettingsAsync();
         }
 
         private async Task SaveSettings()

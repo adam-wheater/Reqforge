@@ -1,37 +1,35 @@
-﻿using System.Text.Json;
+﻿using RocketBoy.Models;
+using System.Text.Json;
 
-namespace RocketBoy.Services;
-
-public class SettingsService
+namespace RocketBoy.Services
 {
-    private static readonly string DefaultSaveLocation = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RocketBoy", "SavedFiles");
-    private static readonly string SettingsFilePath = Path.Combine(DefaultSaveLocation, "settings.json");
-
-    public async Task<SettingsService?> LoadSettingsAsync()
+    public class SettingsService
     {
-        if (File.Exists(SettingsFilePath))
+        private static readonly string DefaultSaveLocation =
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                         "RocketBoy", "SavedFiles");
+        private static readonly string SettingsFilePath =
+            Path.Combine(DefaultSaveLocation, "settings.json");
+
+        public async Task<Settings> LoadSettingsAsync()
         {
-            var json = await File.ReadAllTextAsync(SettingsFilePath);
-            return JsonSerializer.Deserialize<SettingsService>(json);
+            if (File.Exists(SettingsFilePath))
+            {
+                var json = await File.ReadAllTextAsync(SettingsFilePath);
+                return JsonSerializer.Deserialize<Settings>(json)!
+                       ?? new Settings();
+            }
+            return new Settings();
         }
 
-        return null;
-    }
-
-    public async Task SaveSettingsAsync(SettingsService settings)
-    {
-        EnsureDirectoryExists(SettingsFilePath);
-
-        var json = JsonSerializer.Serialize(settings);
-        await File.WriteAllTextAsync(SettingsFilePath, json);
-    }
-
-    private void EnsureDirectoryExists(string filePath)
-    {
-        var directory = Path.GetDirectoryName(filePath);
-        if (!Directory.Exists(directory))
+        public async Task SaveSettingsAsync(Settings settings)
         {
-            Directory.CreateDirectory(directory);
+            var dir = Path.GetDirectoryName(SettingsFilePath)!;
+            if (!Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+
+            var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
+            await File.WriteAllTextAsync(SettingsFilePath, json);
         }
     }
 }
