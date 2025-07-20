@@ -1,4 +1,4 @@
-﻿namespace RocketBoy.Service.Postman.Models
+﻿namespace RocketBoy.Services.Postman.Models
 {
     public class Collection
     {

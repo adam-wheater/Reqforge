@@ -1,6 +1,6 @@
 ﻿using Newtonsoft.Json;
 
-namespace RocketBoy.Service.Postman
+namespace RocketBoy.Services.Postman
 {
     internal class Collection
     {
