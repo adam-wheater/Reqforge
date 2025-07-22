@@ -1,12 +1,39 @@
-@if (!string.IsNullOrEmpty(OpenApiSpecJson))
+@if (HasGeneratedOpenApiSpec && !string.IsNullOrEmpty(OpenApiSpecJson))
 {
-    <button class="btn btn-success" @onclick="OnDownloadOpenAPISpec">Download Spec</button>
-    <textarea class="form-control" rows="10">@OpenApiSpecJson</textarea>
+    <button class="btn btn-success d-block w-100" @onclick="DownloadOpenAPISpec">Download Spec</button>
+    <textarea class="form-control mt-2" rows="10">@OpenApiSpecJson</textarea>
 }
-<button class="btn btn-info" @onclick="OnGenerateOpenAPISpecification">Generate OpenAPI Spec</button>
+<button class="btn btn-info d-block w-100 mt-2" @onclick="GenerateOpenAPISpecification">Generate OpenAPI Spec</button>
+@if (HasGeneratedOpenApiSpec && !string.IsNullOrEmpty(OpenApiSpecJson))
+{
+    <div class="alert alert-success mt-4">
+        <h4>OpenAPI Specification</h4>
+        <pre>@OpenApiSpecJson</pre>
+    </div>
+}
 
 @code {
     [Parameter] public string OpenApiSpecJson { get; set; }
-    [Parameter] public EventCallback OnGenerateOpenAPISpecification { get; set; }
-    [Parameter] public EventCallback OnDownloadOpenAPISpec { get; set; }
+    [Parameter] public bool HasGeneratedOpenApiSpec { get; set; }
+
+    [Inject] public OpenApiService OpenApiService { get; set; } = null!;
+    [Inject] public IJSRuntime JSRuntime { get; set; } = null!;
+    [CascadingParameter] public List<RocketBoy.Components.Pages.Models.RequestObject> OpenedTabs { get; set; } = null!;
+
+    private void GenerateOpenAPISpecification()
+    {
+        if (OpenedTabs != null)
+        {
+            OpenApiSpecJson = OpenApiService.GenerateOpenAPISpec(OpenedTabs);
+            HasGeneratedOpenApiSpec = true;
+        }
+    }
+
+    private void DownloadOpenAPISpec()
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(OpenApiSpecJson);
+        var fileName = "openapi_spec.json";
+        var mimeType = "application/json";
+        JSRuntime.InvokeVoidAsync("saveAsFile", fileName, Convert.ToBase64String(bytes), mimeType);
+    }
 }

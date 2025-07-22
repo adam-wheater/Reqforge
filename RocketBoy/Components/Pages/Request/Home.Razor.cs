@@ -3,10 +3,8 @@ using Microsoft.JSInterop;
 using RocketBoy.Components.Pages.Models;
 using RocketBoy.Models;
 using RocketBoy.Services;
-using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
 namespace RocketBoy.Components.Pages.Request
 {
@@ -30,13 +28,8 @@ namespace RocketBoy.Components.Pages.Request
 
         public List<Collection> Collections { get; set; } = new();
         public RequestObject? SelectedTab { get; set; } = null;
-        public LoadTestParameters LoadTestFormModel { get; set; } = new();
-        public bool ShowLoadTestDialog { get; set; } = false;
         public bool ShowDefaultHeaders { get; set; } = false;
         public List<HeaderObject> DefaultHeaders { get; set; } = GetHttpClientDefaultHeaders();
-        public bool LoadTestInProgress { get; set; } = false;
-        public string LoadTestProgressOutput { get; set; } = string.Empty;
-        public string? LoadTestOutput { get; set; } = null;
         private string openApiSpecJson;
         private bool isValidJson = true;
         public bool SecurityTestInProgress { get; set; } = false;
@@ -46,6 +39,22 @@ namespace RocketBoy.Components.Pages.Request
 
         private string ZapApiKey { get; set; }
         private string ZapBaseUrl { get; set; }
+        public bool HasGeneratedOpenApiSpec { get; set; } = false;
+        public bool HasRunSecurityTest { get; set; } = false;
+
+        private bool IsK6Available()
+        {
+            try
+            {
+                var k6Path = Environment.GetEnvironmentVariable("PATH")?.Split(Path.PathSeparator)
+                    .Select(p => Path.Combine(p, "k6.exe")).FirstOrDefault(File.Exists);
+                return !string.IsNullOrEmpty(k6Path);
+            }
+            catch
+            {
+                return false;
+            }
+        }
 
         protected override async Task OnInitializedAsync()
         {
@@ -55,7 +64,6 @@ namespace RocketBoy.Components.Pages.Request
 
             Settings = await SettingsService.LoadSettingsAsync();
             ShowDefaultHeaders = Settings.ShowDefaultHeaders;
-            ShowLoadTestDialog = Settings.ShowLoadTestDialog;
 
             if (OpenedTabs == null || OpenedTabs.Count == 0) { NewTab(); }
         }
@@ -183,99 +191,6 @@ namespace RocketBoy.Components.Pages.Request
             }
         }
 
-        public async Task SubmitLoadTestForm()
-        {
-            if (SelectedTab == null || LoadTestFormModel.VirtualUsers < 1 || !Regex.IsMatch(LoadTestFormModel.Duration, @"^\d+(s|m|h)$")) return;
-
-            SelectedTab.LoadTestParameters = LoadTestFormModel;
-            ShowLoadTestDialog = false;
-            LoadTestInProgress = true;
-            LoadTestProgressOutput = "Load test is starting...\n";
-            LoadTestOutput = null;
-            string accumulatedLogs = LoadTestProgressOutput;
-            StateHasChanged();
-
-            try
-            {
-                string scriptPath = GenerateTestScript(
-                    LoadTestFormModel.VirtualUsers,
-                    LoadTestFormModel.Duration,
-                    SelectedTab.Url,
-                    SelectedTab.MethodType,
-                    JsonSerializer.Serialize(SelectedTab.Headers),
-                    SelectedTab.Body ?? string.Empty
-                );
-
-                string k6Command = $"k6 run {scriptPath}";
-
-                var processInfo = new ProcessStartInfo
-                {
-                    FileName = "cmd",
-                    Arguments = $"/C {k6Command}",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    StandardOutputEncoding = Encoding.UTF8,
-                    StandardErrorEncoding = Encoding.UTF8
-                };
-
-                var process = new Process { StartInfo = processInfo };
-                process.Start();
-
-                while (!process.HasExited)
-                {
-                    string progressLine = await process.StandardOutput.ReadLineAsync();
-                    if (!string.IsNullOrEmpty(progressLine))
-                    {
-                        LoadTestProgressOutput += progressLine + "\n";
-                        accumulatedLogs += progressLine + "\n";
-                        StateHasChanged();
-                    }
-                }
-
-                string remainingOutput = await process.StandardOutput.ReadToEndAsync();
-                string errorOutput = await process.StandardError.ReadToEndAsync();
-
-                process.WaitForExit();
-                LoadTestInProgress = false;
-
-                accumulatedLogs += remainingOutput + "\n";
-                if (!string.IsNullOrEmpty(errorOutput))
-                {
-                    accumulatedLogs += $"Errors occurred:\n{errorOutput}";
-                }
-
-                LoadTestOutput = accumulatedLogs;
-            }
-            catch (Exception ex)
-            {
-                LoadTestOutput = $"An error occurred: {ex.Message}";
-            }
-
-            StateHasChanged();
-        }
-
-        public static string GenerateTestScript(
-            int vus, string duration, string url, string method,
-            string headersJson, string body)
-        {
-            string templatePath = Path.Combine(AppContext.BaseDirectory, "wwwroot/js/k6_test_template.js");
-            string template = File.ReadAllText(templatePath);
-            string bodyValue = string.IsNullOrEmpty(body) ? "null" : $"'{body}'";
-            string script = template
-                .Replace("__VUS__", vus.ToString())
-                .Replace("__DURATION__", duration)
-                .Replace("__URL__", url)
-                .Replace("__METHOD__", method)
-                .Replace("__HEADERS__", headersJson)
-                .Replace("__BODY__", bodyValue);
-            string outputScriptPath = Path.Combine(FileSystem.AppDataDirectory, "k6_test_script.js");
-            File.WriteAllText(outputScriptPath, script);
-
-            return outputScriptPath;
-        }
-
         public HttpMethod ConvertToHttpMethod(string type) => type switch
         {
             "GET" => HttpMethod.Get,
@@ -290,7 +205,8 @@ namespace RocketBoy.Components.Pages.Request
         public void SelectTab(RequestObject requestObject)
         {
             SelectedTab = requestObject;
-            LoadTestFormModel = requestObject.LoadTestParameters ?? new LoadTestParameters();
+            HasGeneratedOpenApiSpec = false;
+            HasRunSecurityTest = false;
         }
 
         public void NewTab()
@@ -298,6 +214,8 @@ namespace RocketBoy.Components.Pages.Request
             RequestObject requestObject = new();
             OpenedTabs.Add(requestObject);
             SelectedTab = requestObject;
+            HasGeneratedOpenApiSpec = false;
+            HasRunSecurityTest = false;
         }
 
         [JSInvokable]
@@ -363,154 +281,6 @@ namespace RocketBoy.Components.Pages.Request
                                         .Select(tag => tag.Trim())
                                         .ToList();
             }
-        }
-
-        public async Task GenerateOpenAPISpecification()
-        {
-            openApiSpecJson = OpenApiService.GenerateOpenAPISpec(OpenedTabs);
-            StateHasChanged();
-        }
-
-        public void DownloadOpenAPISpec()
-        {
-            var bytes = Encoding.UTF8.GetBytes(openApiSpecJson);
-            var fileName = "openapi_spec.json";
-            var mimeType = "application/json";
-            JSRuntime.InvokeVoidAsync("saveAsFile", fileName, Convert.ToBase64String(bytes), mimeType);
-        }
-
-        public async Task StartSecurityTest()
-        {
-            if (SelectedTab == null || string.IsNullOrEmpty(SelectedTab.Url))
-            {
-                Console.WriteLine("Security test cannot be started: Invalid input.");
-                return;
-            }
-
-            SecurityTestInProgress = true;
-            SecurityTestProgressOutput = "Security test is starting...\n";
-            SecurityTestOutput = null;
-            SecurityTestDetails.Clear();
-            StateHasChanged();
-
-            var zapApiKey = KeystoreService.GetKey("ZapApiKey");
-            var zapBaseUrl = KeystoreService.GetKey("ZapBaseUrl");
-            if (string.IsNullOrEmpty(zapApiKey) || string.IsNullOrEmpty(zapBaseUrl))
-            {
-                SecurityTestOutput = "ZAP settings are not properly configured.";
-                SecurityTestInProgress = false;
-                StateHasChanged();
-                return;
-            }
-
-            HttpClient httpClient = new();
-            var zapService = new ZapService(new ZapSettings { ApiKey = zapApiKey, BaseUrl = zapBaseUrl });
-
-            try
-            {
-                var version = await zapService.GetVersion(httpClient);
-                Console.WriteLine($"Detected ZAP version {version}");
-            }
-            catch
-            {
-                await JSRuntime.InvokeVoidAsync("alert",
-                    "Unable to contact OWASP ZAP at " + zapBaseUrl +
-                    ".\n\nPlease make sure OWASP ZAP is installed and running (download from https://www.zaproxy.org/download/).");
-                SecurityTestInProgress = false;
-                return;
-            }
-
-            try
-            {
-                // Add URL to context
-                var contextName = "Default Context";
-                var addUrlResponse = await zapService.AddUrlToContext(httpClient, contextName, SelectedTab.Url);
-                SecurityTestProgressOutput += $"Added URL to context: {addUrlResponse}\n";
-                StateHasChanged();
-
-                // Run Spider scan
-                var spiderScanId = await zapService.RunSpiderScan(httpClient, SelectedTab.Url);
-                SecurityTestProgressOutput += $"Spider scan started: {spiderScanId}\n";
-                StateHasChanged();
-
-                bool isSpiderCompleted = false;
-                while (!isSpiderCompleted)
-                {
-                    var progress = await zapService.GetSpiderStatus(httpClient, spiderScanId);
-                    SecurityTestProgressOutput += $"Spider scan progress: {progress}\n";
-                    StateHasChanged();
-
-                    if (progress == "100") { isSpiderCompleted = true; }
-                    else { await Task.Delay(5000); } // Wait for 5 seconds before polling again
-                }
-
-                // Run Active scan
-                var activeScanId = await zapService.StartActiveScan(httpClient, SelectedTab.Url);
-                SecurityTestProgressOutput += $"Active scan started: {activeScanId}\n";
-                StateHasChanged();
-
-                bool isActiveScanCompleted = false;
-                while (!isActiveScanCompleted)
-                {
-                    var progress = await zapService.GetActiveScanStatus(httpClient, activeScanId);
-                    SecurityTestProgressOutput += $"Active scan progress: {progress}\n";
-                    StateHasChanged();
-
-                    if (progress == "100") { isActiveScanCompleted = true; }
-                    else { await Task.Delay(5000); } // Wait for 5 seconds before polling again
-                }
-
-                var alerts = await zapService.GetAlerts(httpClient, SelectedTab.Url);
-                SecurityTestOutput = $"Security test completed. Alerts: {alerts}";
-            }
-            catch (HttpRequestException httpRequestException)
-            {
-                SecurityTestOutput = $"An error occurred during the security test: {httpRequestException.Message}";
-            }
-            catch (Exception ex)
-            {
-                SecurityTestOutput = $"An unexpected error occurred during the security test: {ex.Message}";
-            }
-
-            SecurityTestInProgress = false;
-            StateHasChanged();
-        }
-
-        private void ParseScanResults(string progress)
-        {
-            try
-            {
-                using (JsonDocument doc = JsonDocument.Parse(progress))
-                {
-                    JsonElement root = doc.RootElement;
-                    if (root.TryGetProperty("scanProgress", out JsonElement scanProgress))
-                    {
-                        JsonElement hostProcess = scanProgress[1].GetProperty("HostProcess");
-
-                        foreach (JsonElement plugin in hostProcess.EnumerateArray())
-                        {
-                            string pluginName = plugin[0].GetString();
-                            string pluginId = plugin[1].GetString();
-                            string pluginStatus = plugin[3].GetString();
-                            string pluginCount = plugin[5].GetString();
-
-                            SecurityTestDetails.Add($"{pluginName} (ID: {pluginId}) - {pluginStatus} - Issues: {pluginCount}");
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                SecurityTestDetails.Add($"Failed to parse scan results: {ex.Message}");
-            }
-        }
-
-        public void DownloadSecurityTestResults()
-        {
-            var bytes = Encoding.UTF8.GetBytes(SecurityTestOutput ?? string.Empty);
-            var fileName = "security_test_results.txt";
-            var mimeType = "text/plain";
-            JSRuntime.InvokeVoidAsync("saveAsFile", fileName, Convert.ToBase64String(bytes), mimeType);
         }
     }
 }

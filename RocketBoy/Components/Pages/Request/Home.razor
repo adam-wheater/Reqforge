@@ -123,33 +123,30 @@
 
                 </div>
                 <div class="row mb-3">
-                    <div class="col-md-12 d-flex" style="column-gap: 10px;">
-                        <button class="btn btn-primary" @onclick="SendRequest">SEND</button>
-                        <LoadTestComponent 
-                            SelectedTab="SelectedTab" 
-                            LoadTestFormModel="LoadTestFormModel" 
-                            ShowLoadTestDialog="ShowLoadTestDialog" 
-                            LoadTestInProgress="LoadTestInProgress" 
-                            LoadTestProgressOutput="LoadTestProgressOutput" 
-                            LoadTestOutput="LoadTestOutput" 
-                            OnShowLoadTestDialogChanged="(val) => ShowLoadTestDialog = val" 
-                            OnSubmitLoadTestForm="SubmitLoadTestForm" />
 
-                        <ZapSecurityTestComponent 
-                            SelectedTab="SelectedTab" 
-                            ZapApiKey="ZapApiKey" 
-                            ZapBaseUrl="ZapBaseUrl" 
-                            SecurityTestInProgress="SecurityTestInProgress" 
-                            SecurityTestProgressOutput="SecurityTestProgressOutput" 
-                            SecurityTestOutput="SecurityTestOutput" 
-                            OnStartSecurityTest="StartSecurityTest" 
-                            OnDownloadSecurityTestResults="DownloadSecurityTestResults" />
+                    <div class="mb-2">
+                        <button class="btn btn-primary d-block w-100" @onclick="SendRequest">SEND</button>
 
+                    </div>
+                    
+                    <div class="mb-2">
+                        <LoadTestComponent SelectedTab="SelectedTab" />
+                    </div>
+
+                    <div class="mb-2">
+                        @if (!string.IsNullOrEmpty(ZapApiKey) && !string.IsNullOrEmpty(ZapBaseUrl))
+                        {
+                            <ZapSecurityTestComponent 
+                                SelectedTab="SelectedTab" />
+                        }
+                    </div>
+                    
+                    <div class="mb-2">
                         <OpenApiExportComponent 
                             OpenApiSpecJson="openApiSpecJson" 
-                            OnGenerateOpenAPISpecification="GenerateOpenAPISpecification" 
-                            OnDownloadOpenAPISpec="DownloadOpenAPISpec" />
+                            HasGeneratedOpenApiSpec="HasGeneratedOpenApiSpec" />
                     </div>
+
                 </div>
                 <div class="row mb-3">
                     <div class="col-md-12">

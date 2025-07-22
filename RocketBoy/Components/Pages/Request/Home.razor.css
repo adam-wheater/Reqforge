@@ -103,7 +103,19 @@ button {
 
 .mr-3 {
     margin-right: 1rem !important;
-    ﻿body
+}
 
-{
+.action-item {
+    display: flex;
+    align-items: stretch;
+    height: 48px; /* Set your desired height */
+    min-width: 120px;
+}
+
+    .action-item > * {
+        flex: 1 1 auto;
+        height: 100%;
+    }
+
+body {
 }
