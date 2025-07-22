@@ -8,7 +8,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
-namespace RocketBoy.Components.Pages
+namespace RocketBoy.Components.Pages.Request
 {
     public partial class Home : ComponentBase
     {
