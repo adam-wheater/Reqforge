@@ -1,0 +1,79 @@
+@using RocketBoy.Components.Pages.Models
+@using Microsoft.AspNetCore.Components.Forms
+@using System.Text.RegularExpressions
+
+@if (ShowLoadTestDialog)
+{
+    <EditForm Model="LoadTestFormModel" OnValidSubmit="HandleSubmit">
+        <div class="modal show d-block" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Load Test Parameters</h5>
+                        <button type="button" class="btn-close" @onclick="ShowDialogFalse"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label>Virtual Users</label>
+                            <InputNumber @bind-Value="LoadTestFormModel.VirtualUsers" Min="1" Max="1000" class="form-control" />
+                            @if (LoadTestFormModel.VirtualUsers < 1)
+                            {
+                                <span class="text-danger">Virtual Users must be at least 1</span>
+                            }
+                        </div>
+                        <div class="form-group">
+                            <label>Duration</label>
+                            <InputText @bind-Value="LoadTestFormModel.Duration" class="form-control" />
+                            @if (!Regex.IsMatch(LoadTestFormModel.Duration, @"^\d+(s|m|h)$"))
+                            {
+                                <span class="text-danger">Enter a valid duration (e.g., "30s", "1m")</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-primary">Start Test</button>
+                        <button type="button" class="btn btn-secondary" @onclick="ShowDialogFalse">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </EditForm>
+}
+@if (LoadTestInProgress)
+{
+    <div class="alert alert-info mt-4">
+        <h4>Load Test in Progress</h4>
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <pre>@LoadTestProgressOutput</pre>
+    </div>
+}
+@if (LoadTestOutput != null)
+{
+    <div class="alert alert-success mt-4">
+        <h4>Load Test Results</h4>
+        <pre>@LoadTestOutput</pre>
+    </div>
+}
+
+@code {
+    [Parameter] public RequestObject SelectedTab { get; set; } = default!;
+    [Parameter] public LoadTestParameters LoadTestFormModel { get; set; } = default!;
+    [Parameter] public bool ShowLoadTestDialog { get; set; }
+    [Parameter] public bool LoadTestInProgress { get; set; }
+    [Parameter] public string LoadTestProgressOutput { get; set; } = string.Empty;
+    [Parameter] public string? LoadTestOutput { get; set; }
+    [Parameter] public EventCallback<bool> OnShowLoadTestDialogChanged { get; set; }
+    [Parameter] public EventCallback OnSubmitLoadTestForm { get; set; }
+
+    private async Task ShowDialogFalse()
+    {
+        await OnShowLoadTestDialogChanged.InvokeAsync(false);
+    }
+
+    private async Task HandleSubmit(EditContext context)
+    {
+        await OnSubmitLoadTestForm.InvokeAsync();
+    }
+}

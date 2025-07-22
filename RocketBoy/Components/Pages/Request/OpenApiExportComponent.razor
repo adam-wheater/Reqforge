@@ -1,0 +1,12 @@
+@if (!string.IsNullOrEmpty(OpenApiSpecJson))
+{
+    <button class="btn btn-success" @onclick="OnDownloadOpenAPISpec">Download Spec</button>
+    <textarea class="form-control" rows="10">@OpenApiSpecJson</textarea>
+}
+<button class="btn btn-info" @onclick="OnGenerateOpenAPISpecification">Generate OpenAPI Spec</button>
+
+@code {
+    [Parameter] public string OpenApiSpecJson { get; set; }
+    [Parameter] public EventCallback OnGenerateOpenAPISpecification { get; set; }
+    [Parameter] public EventCallback OnDownloadOpenAPISpec { get; set; }
+}

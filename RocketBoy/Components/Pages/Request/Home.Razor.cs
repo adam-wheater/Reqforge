@@ -10,7 +10,7 @@ using System.Text.RegularExpressions;
 
 namespace RocketBoy.Components.Pages
 {
-    public partial class Home : IDisposable
+    public partial class Home : ComponentBase
     {
         // Dependencies and services
         private DotNetObjectReference<Home>? objRef;

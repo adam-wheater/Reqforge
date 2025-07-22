@@ -1,13 +1,12 @@
 ﻿@page "/"
-
-@implements IDisposable
-
+@layout MainLayout
 @using System.Text.Json
 @using System.Diagnostics
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Forms
 @using System.Text
 @using System.Text.RegularExpressions
+@using RocketBoy.Components.Layout
 
 <div class="container-fluid d-flex p-0 h-100">
     <div class="content flex-grow-1 p-3" style="overflow-y: auto;">
@@ -126,12 +125,30 @@
                 <div class="row mb-3">
                     <div class="col-md-12 d-flex" style="column-gap: 10px;">
                         <button class="btn btn-primary" @onclick="SendRequest">SEND</button>
-                        <button class="btn btn-secondary" @onclick="() => ShowLoadTestDialog = true">LOAD</button>
-                        @if (!string.IsNullOrEmpty(ZapApiKey) && !string.IsNullOrEmpty(ZapBaseUrl))
-                        {
-                            <button class="btn btn-warning" @onclick="StartSecurityTest">Start Security Test</button>
-                        }
-                        <button class="btn btn-info" @onclick="GenerateOpenAPISpecification">Generate OpenAPI Spec</button>
+                        <LoadTestComponent 
+                            SelectedTab="SelectedTab" 
+                            LoadTestFormModel="LoadTestFormModel" 
+                            ShowLoadTestDialog="ShowLoadTestDialog" 
+                            LoadTestInProgress="LoadTestInProgress" 
+                            LoadTestProgressOutput="LoadTestProgressOutput" 
+                            LoadTestOutput="LoadTestOutput" 
+                            OnShowLoadTestDialogChanged="(val) => ShowLoadTestDialog = val" 
+                            OnSubmitLoadTestForm="SubmitLoadTestForm" />
+
+                        <ZapSecurityTestComponent 
+                            SelectedTab="SelectedTab" 
+                            ZapApiKey="ZapApiKey" 
+                            ZapBaseUrl="ZapBaseUrl" 
+                            SecurityTestInProgress="SecurityTestInProgress" 
+                            SecurityTestProgressOutput="SecurityTestProgressOutput" 
+                            SecurityTestOutput="SecurityTestOutput" 
+                            OnStartSecurityTest="StartSecurityTest" 
+                            OnDownloadSecurityTestResults="DownloadSecurityTestResults" />
+
+                        <OpenApiExportComponent 
+                            OpenApiSpecJson="openApiSpecJson" 
+                            OnGenerateOpenAPISpecification="GenerateOpenAPISpecification" 
+                            OnDownloadOpenAPISpec="DownloadOpenAPISpec" />
                     </div>
                 </div>
                 <div class="row mb-3">
@@ -153,89 +170,6 @@
                             <p>Trigger a request to see a response.</p>
                         }
                     </div>
-                </div>
-            }
-
-            @if (!string.IsNullOrEmpty(openApiSpecJson))
-            {
-                <button class="btn btn-success" @onclick="DownloadOpenAPISpec">Download Spec</button>
-                <textarea class="form-control" rows="10">@openApiSpecJson</textarea>
-            }
-
-            @if (ShowLoadTestDialog)
-            {
-                <EditForm Model="LoadTestFormModel" OnValidSubmit="SubmitLoadTestForm">
-                    <div class="modal show d-block" tabindex="-1">
-                        <div class="modal-dialog">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                    <h5 class="modal-title">Load Test Parameters</h5>
-                                    <button type="button" class="btn-close" @onclick="() => ShowLoadTestDialog = false"></button>
-                                </div>
-                                <div class="modal-body">
-                                    <div class="form-group">
-                                        <label>Virtual Users</label>
-                                        <InputNumber @bind-Value="LoadTestFormModel.VirtualUsers" Min="1" Max="1000" class="form-control" />
-                                        @if (LoadTestFormModel.VirtualUsers < 1)
-                                        {
-                                            <span class="text-danger">Virtual Users must be at least 1</span>
-                                        }
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Duration</label>
-                                        <InputText @bind-Value="LoadTestFormModel.Duration" class="form-control" />
-                                        @if (!Regex.IsMatch(LoadTestFormModel.Duration, @"^\d+(s|m|h)$"))
-                                        {
-                                            <span class="text-danger">Enter a valid duration (e.g., "30s", "1m")</span>
-                                        }
-                                    </div>
-                                </div>
-                                <div class="modal-footer">
-                                    <button type="submit" class="btn btn-primary">Start Test</button>
-                                    <button type="button" class="btn btn-secondary" @onclick="() => ShowLoadTestDialog = false">Cancel</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </EditForm>
-            }
-
-            @if (LoadTestInProgress)
-            {
-                <div class="alert alert-info mt-4">
-                    <h4>Load Test in Progress</h4>
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <pre>@LoadTestProgressOutput</pre>
-                </div>
-            }
-
-            @if (LoadTestOutput != null)
-            {
-                <div class="alert alert-success mt-4">
-                    <h4>Load Test Results</h4>
-                    <pre>@LoadTestOutput</pre>
-                </div>
-            }
-
-            @if (SecurityTestInProgress)
-            {
-                <div class="alert alert-info mt-4">
-                    <h4>Security Test in Progress</h4>
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <pre>@SecurityTestProgressOutput</pre>
-                </div>
-            }
-
-            @if (!string.IsNullOrEmpty(SecurityTestOutput))
-            {
-                <div class="alert alert-success mt-4">
-                    <h4>Security Test Results</h4>
-                    <pre>@SecurityTestOutput</pre>
-                    <button class="btn btn-success" @onclick="DownloadSecurityTestResults">Download Results</button>
                 </div>
             }
         </div>
