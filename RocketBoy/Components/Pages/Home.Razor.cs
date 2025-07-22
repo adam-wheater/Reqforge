@@ -14,6 +14,7 @@ namespace RocketBoy.Components.Pages
     {
         // Dependencies and services
         private DotNetObjectReference<Home>? objRef;
+
         [Inject] public IJSRuntime JSRuntime { get; set; } = null!;
         [Inject] public OpenApiService OpenApiService { get; set; } = null!;
         [Inject] public ZapSettings ZapSettings { get; set; } = null!;
@@ -26,6 +27,7 @@ namespace RocketBoy.Components.Pages
 
         // State properties
         public List<RequestObject> OpenedTabs { get; set; } = new();
+
         public List<Collection> Collections { get; set; } = new();
         public RequestObject? SelectedTab { get; set; } = null;
         public LoadTestParameters LoadTestFormModel { get; set; } = new();

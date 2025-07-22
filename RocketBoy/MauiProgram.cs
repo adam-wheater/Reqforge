@@ -21,7 +21,7 @@ namespace RocketBoy
             builder.Services.AddScoped<ZapSettings>();
             builder.Services.AddScoped<KeystoreService>();
             builder.Services.AddSingleton<SettingsService>();
-            builder.Services.AddScoped<CollectionService>();
+            //builder.Services.AddScoped<CollectionService>();
 #if DEBUG
             builder.Services.AddBlazorWebViewDeveloperTools();
             builder.Logging.AddDebug();

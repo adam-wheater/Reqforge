@@ -10,6 +10,7 @@ namespace RocketBoy.Services
         {
             _settings = settings;
         }
+
         public async Task<string> GetVersion(HttpClient httpClient)
         {
             var requestUrl = $"{_settings.BaseUrl}/JSON/core/view/version/?apikey={_settings.ApiKey}";

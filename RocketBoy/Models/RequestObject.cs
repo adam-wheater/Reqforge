@@ -17,10 +17,12 @@ public class RequestObject : IEventable
 
     // OpenAPI-specific properties
     public string Summary { get; set; } = "";
+
     public string Description { get; set; } = "";
     public List<string> Tags { get; set; } = new List<string>();
 
     [IgnoreDataMember]
     public bool Saved { get; set; }
+
     public bool ChangedWithoutSave { get; set; }
 }

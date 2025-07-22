@@ -1,7 +1,4 @@
-﻿using System;
-using System.IO;
-
-namespace RocketBoy.Models
+﻿namespace RocketBoy.Models
 {
     public class Settings
     {
@@ -19,10 +16,12 @@ namespace RocketBoy.Models
 
         // Home
         public bool ShowDefaultHeaders { get; set; } = false;
+
         public bool ShowLoadTestDialog { get; set; } = false;
 
-        // Next 
+        // Next
         public int DefaultVirtualUsers { get; set; } = 10;
+
         public string DefaultLoadTestDuration { get; set; } = "30s";
     }
 }

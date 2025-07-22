@@ -8,6 +8,7 @@ namespace RocketBoy.Services
         private static readonly string DefaultSaveLocation =
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                          "RocketBoy", "SavedFiles");
+
         private static readonly string SettingsFilePath =
             Path.Combine(DefaultSaveLocation, "settings.json");
 
