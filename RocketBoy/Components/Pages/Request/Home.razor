@@ -9,166 +9,167 @@
 @using RocketBoy.Components.Layout
 
 <div class="container-fluid d-flex p-0 h-100">
-    <div class="content flex-grow-1 p-3" style="overflow-y: auto;">
-        <ul class="nav nav-tabs">
-            @foreach (var tab in OpenedTabs)
-            {
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link @(tab == SelectedTab ? "active" : "")" type="button" role="tab" @onclick="() => SelectTab(tab)">
-                        <div class="text-content">@tab.Name</div>
-                        <div class="end-content">
-                            @(!tab.Saved || tab.ChangedWithoutSave ? "⬤" : "")
-                            <a class="close-button" @onclick="() => CloseTab(tab)" @onclick:preventDefault>x</a>
-                        </div>
-                    </button>
-                </li>
-            }
+	<div class="content flex-grow-1 p-3" style="overflow-y: auto;">
+		<ul class="nav nav-tabs">
+			@foreach (var tab in OpenedTabs)
+			{
+				<li class="nav-item" role="presentation">
+					<button class="nav-link @(tab == SelectedTab ? "active" : "")" type="button" role="tab" @onclick="() => SelectTab(tab)">
+						<div class="text-content">@tab.Name</div>
+						<div class="end-content">
+							@(!tab.Saved || tab.ChangedWithoutSave ? "⬤" : "")
+							<a class="close-button" @onclick="() => CloseTab(tab)" @onclick:preventDefault>x</a>
+						</div>
+					</button>
+				</li>
+			}
 
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" type="button" role="tab" @onclick="NewTab">+</button>
-            </li>
-        </ul>
-        <div class="tab-content">
-            @if (SelectedTab != null)
-            {
-                <div class="row mb-3">
-                    <div class="col-md-12">
-                        <label>Name</label>
-                        <InputText @bind-Value="SelectedTab.Name" DisplayName="Name" class="form-control" />
-                    </div>
-                </div>
+			<li class="nav-item" role="presentation">
+				<button class="nav-link" type="button" role="tab" @onclick="NewTab">+</button>
+			</li>
+		</ul>
+		<div class="tab-content">
+			@if (SelectedTab != null)
+			{
+				<div class="row mb-3">
+					<div class="col-md-12">
+						<label>Name</label>
+						<InputText @bind-Value="SelectedTab.Name" DisplayName="Name" class="form-control" />
+					</div>
+				</div>
 
-                <div class="row mb-3">
-                    <div class="col-md-3">
-                        <label>Method</label>
-                        <InputSelect @bind-Value="SelectedTab.MethodType" class="form-control">
-                            <option value="GET">GET</option>
-                            <option value="POST">POST</option>
-                            <option value="PATCH">PATCH</option>
-                            <option value="PUT">PUT</option>
-                            <option value="DELETE">DELETE</option>
-                            <option value="OPTIONS">OPTIONS</option>
-                        </InputSelect>
-                    </div>
-                    <div class="col-md-9">
-                        <label>URI</label>
-                        <InputText @bind-Value="SelectedTab.Url" DisplayName="URI" class="form-control" />
-                    </div>
-                </div>
-                <div class="row mb-3">
-                    <div class="col-md-4">
-                        <label>Summary</label>
-                        <InputTextArea @bind-Value="SelectedTab.Summary" Placeholder="Enter a brief summary" class="form-control" />
-                    </div>
-                    <div class="col-md-8">
-                        <label>Description</label>
-                        <InputTextArea @bind-Value="SelectedTab.Description" Placeholder="Enter a brief description" class="form-control" />
-                    </div>
-                </div>
-                <div class="row mb-3">
-                    <div class="col-md-12">
-                        <label>Tags (comma-separated)</label>
-                        <InputText @bind-Value="TagsAsString" Placeholder="Tags (comma-separated)" class="form-control" />
-                    </div>
-                </div>
-                <div class="row mb-3">
-                    <div class="col-md-12">
-                        <label>Body (JSON required)</label>
-                        <InputTextArea @bind-Value="SelectedTab.Body" @oninput="ValidateJson" class="form-control" rows="5" placeholder="Enter JSON body here..." />
-                        @if (!isValidJson && !string.IsNullOrEmpty(SelectedTab.Body))
-                        {
-                            <p class="text-danger">Invalid JSON format.</p>
-                        }
-                    </div>
-                </div>
-                <div class="row mb-3">
-                    <div class="col-md-12">
-                        <h3>Headers</h3>
-                        <div class="col-md-12 d-flex mb-3" style="column-gap: 10px;">
-                            <button class="btn btn-secondary mr-3" @onclick="ToggleDefaultHeaders">
-                                @(ShowDefaultHeaders ? "Hide Default Headers" : "Show Default Headers")
-                            </button>
-                            <button class="btn btn-secondary" @onclick="AddHeader">+ Add Header</button>
-                        </div>
-                        @if (ShowDefaultHeaders)
-                        {
-                            @foreach (var header in DefaultHeaders)
-                            {
-                                <div class="row mb-2">
-                                    <div class="col">
-                                        <InputText @bind-Value="header.Name" placeholder="Default Header Name" class="form-control" disabled />
-                                    </div>
-                                    <div class="col">
-                                        <InputText @bind-Value="header.Value" placeholder="Header Value" class="form-control" />
-                                    </div>
-                                </div>
-                            }
-                        }
+				<div class="row mb-3">
+					<div class="col-md-3">
+						<label>Method</label>
+						<InputSelect @bind-Value="SelectedTab.MethodType" class="form-control">
+							<option value="GET">GET</option>
+							<option value="POST">POST</option>
+							<option value="PATCH">PATCH</option>
+							<option value="PUT">PUT</option>
+							<option value="DELETE">DELETE</option>
+							<option value="OPTIONS">OPTIONS</option>
+						</InputSelect>
+					</div>
+					<div class="col-md-9">
+						<label>URI</label>
+						<InputText @bind-Value="SelectedTab.Url" DisplayName="URI" class="form-control" />
+					</div>
+				</div>
+				<div class="row mb-3">
+					<div class="col-md-4">
+						<label>Summary</label>
+						<InputTextArea @bind-Value="SelectedTab.Summary" Placeholder="Enter a brief summary" class="form-control" />
+					</div>
+					<div class="col-md-8">
+						<label>Description</label>
+						<InputTextArea @bind-Value="SelectedTab.Description" Placeholder="Enter a brief description" class="form-control" />
+					</div>
+				</div>
+				<div class="row mb-3">
+					<div class="col-md-12">
+						<label>Tags (comma-separated)</label>
+						<InputText @bind-Value="TagsAsString" Placeholder="Tags (comma-separated)" class="form-control" />
+					</div>
+				</div>
+				<div class="row mb-3">
+					<div class="col-md-12">
+						<label>Body (JSON required)</label>
+						<InputTextArea @bind-Value="SelectedTab.Body" @oninput="ValidateJson" class="form-control" rows="5" placeholder="Enter JSON body here..." />
+						@if (!isValidJson && !string.IsNullOrEmpty(SelectedTab.Body))
+						{
+							<p class="text-danger">Invalid JSON format.</p>
+						}
+					</div>
+				</div>
+				<div class="row mb-3">
+					<div class="col-md-12">
+						<h3>Headers</h3>
+						<div class="col-md-12 d-flex mb-3" style="column-gap: 10px;">
+							<button class="btn btn-secondary mr-3" @onclick="ToggleDefaultHeaders">
+								@(ShowDefaultHeaders ? "Hide Default Headers" : "Show Default Headers")
+							</button>
+							<button class="btn btn-secondary" @onclick="AddHeader">+ Add Header</button>
+						</div>
+						@if (ShowDefaultHeaders)
+						{
+							@foreach (var header in DefaultHeaders)
+							{
+								<div class="row mb-2">
+									<div class="col">
+										<InputText @bind-Value="header.Name" placeholder="Default Header Name" class="form-control" disabled />
+									</div>
+									<div class="col">
+										<InputText @bind-Value="header.Value" placeholder="Header Value" class="form-control" />
+									</div>
+								</div>
+							}
+						}
 
-                        @foreach (var header in SelectedTab.Headers)
-                        {
-                            <div class="row mb-2">
-                                <div class="col">
-                                    <InputText @bind-Value="header.Name" placeholder="Header Name" class="form-control" />
-                                </div>
-                                <div class="col">
-                                    <InputText @bind-Value="header.Value" placeholder="Header Value" class="form-control" />
-                                </div>
-                                <div class="col-auto">
-                                    <button class="btn btn-danger" @onclick="() => RemoveHeader(header)">Remove</button>
-                                </div>
-                            </div>
-                        }
-                    </div>
+						@foreach (var header in SelectedTab.Headers)
+						{
+							<div class="row mb-2">
+								<div class="col">
+									<InputText @bind-Value="header.Name" placeholder="Header Name" class="form-control" />
+								</div>
+								<div class="col">
+									<InputText @bind-Value="header.Value" placeholder="Header Value" class="form-control" />
+								</div>
+								<div class="col-auto">
+									<button class="btn btn-danger" @onclick="() => RemoveHeader(header)">Remove</button>
+								</div>
+							</div>
+						}
+					</div>
 
-                </div>
-                <div class="row mb-3">
+				</div>
+				<div class="row mb-3">
 
-                    <div class="mb-2">
-                        <button class="btn btn-primary d-block w-100" @onclick="SendRequest">SEND</button>
+					<div class="mb-2">
+						<button class="btn btn-primary d-block w-100" @onclick="SendRequest">SEND</button>
 
-                    </div>
-                    
-                    <div class="mb-2">
-                        <LoadTestComponent SelectedTab="SelectedTab" />
-                    </div>
+					</div>
+					
+					@if(IsK6Available())
+					{
+					   <div class="mb-2">
+						<LoadTestComponent SelectedTab="SelectedTab" />
+						</div> 
+					}
+					
 
-                    <div class="mb-2">
-                        @if (!string.IsNullOrEmpty(ZapApiKey) && !string.IsNullOrEmpty(ZapBaseUrl))
-                        {
-                            <ZapSecurityTestComponent 
-                                SelectedTab="SelectedTab" />
-                        }
-                    </div>
-                    
-                    <div class="mb-2">
-                        <OpenApiExportComponent 
-                            OpenApiSpecJson="openApiSpecJson" 
-                            HasGeneratedOpenApiSpec="HasGeneratedOpenApiSpec" />
-                    </div>
+					@if (IsZapAvailable())
+					{
+						<div class="mb-2">
+								<ZapSecurityTestComponent SelectedTab="SelectedTab" />
+						</div>
+					}
+					
+					<div class="mb-2">
+						<OpenApiExportComponent OpenApiSpecJson="openApiSpecJson" HasGeneratedOpenApiSpec="HasGeneratedOpenApiSpec" />
+					</div>
 
-                </div>
-                <div class="row mb-3">
-                    <div class="col-md-12">
-                        <h1>Response</h1>
-                        @if (SelectedTab.Response != null)
-                        {
-                            <div>
-                                <h2>HTTP RESPONSE</h2>
-                                @(JsonSerializer.Serialize(SelectedTab.Response))
-                            </div>
-                            <div>
-                                <h2>BODY RESPONSE</h2>
-                                @(SelectedTab.Response.Content.ReadAsStringAsync().Result)
-                            </div>
-                        }
-                        else
-                        {
-                            <p>Trigger a request to see a response.</p>
-                        }
-                    </div>
-                </div>
-            }
-        </div>
-    </div>
+				</div>
+				<div class="row mb-3">
+					<div class="col-md-12">
+						<h1>Response</h1>
+						@if (SelectedTab.Response != null)
+						{
+							<div>
+								<h2>HTTP RESPONSE</h2>
+								@(JsonSerializer.Serialize(SelectedTab.Response))
+							</div>
+							<div>
+								<h2>BODY RESPONSE</h2>
+								@(SelectedTab.Response.Content.ReadAsStringAsync().Result)
+							</div>
+						}
+						else
+						{
+							<p>Trigger a request to see a response.</p>
+						}
+					</div>
+				</div>
+			}
+		</div>
+	</div>
 </div>

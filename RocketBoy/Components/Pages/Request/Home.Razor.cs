@@ -14,29 +14,16 @@ namespace RocketBoy.Components.Pages.Request
         private DotNetObjectReference<Home>? objRef;
 
         [Inject] public IJSRuntime JSRuntime { get; set; } = null!;
-        [Inject] public OpenApiService OpenApiService { get; set; } = null!;
-        [Inject] public ZapSettings ZapSettings { get; set; } = null!;
         [Inject] public ZapService ZapService { get; set; } = null!;
         [Inject] public KeystoreService KeystoreService { get; set; } = null!;
-        [Inject] public NavigationManager Navigation { get; set; } = null!;
         [Inject] public SettingsService SettingsService { get; set; } = null!;
 
         private Settings Settings { get; set; } = new Settings();
-
-        // State properties
         public List<RequestObject> OpenedTabs { get; set; } = new();
-
-        public List<Collection> Collections { get; set; } = new();
         public RequestObject? SelectedTab { get; set; } = null;
         public bool ShowDefaultHeaders { get; set; } = false;
         public List<HeaderObject> DefaultHeaders { get; set; } = GetHttpClientDefaultHeaders();
-        private string openApiSpecJson;
         private bool isValidJson = true;
-        public bool SecurityTestInProgress { get; set; } = false;
-        public string SecurityTestProgressOutput { get; set; } = string.Empty;
-        public string? SecurityTestOutput { get; set; } = null;
-        public List<string> SecurityTestDetails { get; set; } = new();
-
         private string ZapApiKey { get; set; }
         private string ZapBaseUrl { get; set; }
         public bool HasGeneratedOpenApiSpec { get; set; } = false;
@@ -49,6 +36,24 @@ namespace RocketBoy.Components.Pages.Request
                 var k6Path = Environment.GetEnvironmentVariable("PATH")?.Split(Path.PathSeparator)
                     .Select(p => Path.Combine(p, "k6.exe")).FirstOrDefault(File.Exists);
                 return !string.IsNullOrEmpty(k6Path);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private bool IsZapAvailable()
+        {
+            if (string.IsNullOrWhiteSpace(ZapApiKey) || string.IsNullOrWhiteSpace(ZapBaseUrl))
+            {
+                return false;
+            }
+
+            try
+            {
+                HttpClient httpClient = new();
+                return ZapService.GetVersion(httpClient).Result;
             }
             catch
             {
@@ -223,11 +228,6 @@ namespace RocketBoy.Components.Pages.Request
         {
             Console.WriteLine("Ctrl + S was pressed in the context of the component.");
             //save
-        }
-
-        public void Dispose()
-        {
-            objRef?.Dispose();
         }
 
         public async Task CloseTab(RequestObject requestObject)

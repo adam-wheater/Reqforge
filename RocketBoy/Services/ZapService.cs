@@ -11,14 +11,29 @@ namespace RocketBoy.Services
             _settings = settings;
         }
 
-        public async Task<string> GetVersion(HttpClient httpClient)
+        public async Task<bool> GetVersion(HttpClient httpClient)
         {
-            var requestUrl = $"{_settings.BaseUrl}/JSON/core/view/version/?apikey={_settings.ApiKey}";
-            var response = await httpClient.GetAsync(requestUrl);
-            response.EnsureSuccessStatusCode();
-            var json = await response.Content.ReadAsStringAsync();
-            using var doc = JsonDocument.Parse(json);
-            return doc.RootElement.GetProperty("version").GetString()!;
+            try
+            {
+                var requestUrl = $"{_settings.BaseUrl}/JSON/core/view/version/?apikey={_settings.ApiKey}";
+                var response = await httpClient.GetAsync(requestUrl);
+                if (!response.IsSuccessStatusCode)
+                    return false;
+
+                var json = await response.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(json);
+
+                if (doc.RootElement.TryGetProperty("version", out var versionProp))
+                {
+                    var version = versionProp.GetString();
+                    return !string.IsNullOrEmpty(version);
+                }
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         public async Task<string> GetSpiderStatus(HttpClient httpClient, int scanId)
