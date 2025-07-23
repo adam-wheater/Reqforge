@@ -1,0 +1,147 @@
+@using RocketBoy.Components.Pages.Models
+@using RocketBoy.Services
+@inject IJSRuntime JSRuntime
+@inject KeystoreService KeystoreService
+@inject ZapService ZapService
+@inject ZapSettings ZapSettings
+
+@if (!isZapAvailable)
+{
+    <div class="alert alert-warning">
+        <strong>Security testing disabled:</strong>
+        OWASP ZAP not reachable at @ZapBaseUrl
+        <br />Configure and start ZAP, then refresh.
+    </div>
+}
+else
+{
+    <button class="btn btn-warning d-block w-100"
+            @onclick="StartSecurityTest">
+        Start Security Test
+    </button>
+    @if (SecurityTestInProgress)
+    {
+        <div class="alert alert-info mt-4">
+            <h4>Security Test in Progress</h4>
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading…</span>
+            </div>
+            <pre>@SecurityTestProgressOutput</pre>
+        </div>
+    }
+    @if (HasRunSecurityTest && !string.IsNullOrEmpty(SecurityTestOutput))
+    {
+        <div class="alert alert-success mt-4">
+            <h4>Security Test Results</h4>
+            <pre>@SecurityTestOutput</pre>
+            <button class="btn btn-success d-block w-100 mt-2"
+                    @onclick="DownloadSecurityTestResults">
+                Download Results
+            </button>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public RequestObject SelectedTab { get; set; } = default!;
+
+    private string ZapApiKey = "";
+    private string ZapBaseUrl = "";
+    private bool isZapAvailable;
+    private bool SecurityTestInProgress;
+    private string SecurityTestProgressOutput = "";
+    private string? SecurityTestOutput;
+    private bool HasRunSecurityTest;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await KeystoreService.LoadKeys();
+        ZapApiKey = KeystoreService.GetKey("ZapApiKey") ?? "";
+        ZapBaseUrl = KeystoreService.GetKey("ZapBaseUrl") ?? "";
+
+        if (!string.IsNullOrEmpty(ZapApiKey) &&
+            !string.IsNullOrEmpty(ZapBaseUrl))
+        {
+            try
+            {
+                using var client = new HttpClient();
+                isZapAvailable = await ZapService.GetVersion(client);
+            }
+            catch
+            {
+                isZapAvailable = false;
+            }
+        }
+    }
+
+    private async Task StartSecurityTest()
+    {
+        SecurityTestInProgress = true;
+        SecurityTestProgressOutput = "Starting security test…\n";
+        HasRunSecurityTest = false;
+        StateHasChanged();
+
+        var client = new HttpClient();
+        var zap = new ZapService(
+            new ZapSettings { ApiKey = ZapApiKey, BaseUrl = ZapBaseUrl });
+
+        try
+        {
+            // add to context
+            var ctx = "Default Context";
+            var addResp = await zap.AddUrlToContext(client, ctx, SelectedTab.Url!);
+            SecurityTestProgressOutput += $"Context added: {addResp}\n";
+            StateHasChanged();
+
+            // spider
+            var spiderId = await zap.RunSpiderScan(client, SelectedTab.Url!);
+            SecurityTestProgressOutput += $"Spider ID: {spiderId}\n";
+            StateHasChanged();
+
+            while (true)
+            {
+                var progress = await zap.GetSpiderStatus(client, spiderId);
+                SecurityTestProgressOutput += $"Spider: {progress}%\n";
+                StateHasChanged();
+                if (progress == "100") break;
+                await Task.Delay(5000);
+            }
+
+            // active scan
+            var activeId = await zap.StartActiveScan(client, SelectedTab.Url!);
+            SecurityTestProgressOutput += $"ActiveScan ID: {activeId}\n";
+            StateHasChanged();
+
+            while (true)
+            {
+                var prog = await zap.GetActiveScanStatus(client, activeId);
+                SecurityTestProgressOutput += $"ActiveScan: {prog}%\n";
+                StateHasChanged();
+                if (prog == "100") break;
+                await Task.Delay(5000);
+            }
+
+            var alerts = await zap.GetAlerts(client, SelectedTab.Url!);
+            SecurityTestOutput = $"Completed. Alerts:\n{alerts}";
+            HasRunSecurityTest = true;
+        }
+        catch (Exception ex)
+        {
+            SecurityTestOutput = $"Error: {ex.Message}";
+            HasRunSecurityTest = true;
+        }
+        finally
+        {
+            SecurityTestInProgress = false;
+            StateHasChanged();
+        }
+    }
+
+    private void DownloadSecurityTestResults()
+    {
+        var data = Convert.ToBase64String(
+            System.Text.Encoding.UTF8.GetBytes(SecurityTestOutput ?? ""));
+        JSRuntime.InvokeVoidAsync("saveAsFile",
+            "zap-results.txt", data, "text/plain");
+    }
+}

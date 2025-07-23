@@ -1,6 +1,11 @@
 @page "/settings"
 @using RocketBoy.Models
 
+<button class="btn btn-outline-secondary mb-1"
+        @onclick="@Keystore">
+    Keystore
+</button>
+
 <EditForm Model="Settings" OnValidSubmit="@SaveSettings">
     <div class="mb-3">
         <label for="RequestsSaveLocation" class="form-label">Requests Save Location</label>

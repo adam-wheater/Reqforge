@@ -1,20 +1,21 @@
-﻿using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Forms;
+﻿using Jint;
+using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using RocketBoy.Components.Pages.Models;
 using RocketBoy.Models;
 using RocketBoy.Services;
+using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 
 namespace RocketBoy.Components.Pages.Request
 {
-    public partial class Home : ComponentBase
+    public partial class Home : ComponentBase, IDisposable
     {
-        [Inject] private OpenApiImportService OpenApiImport { get; set; } = null!;
+        [Inject] private RequestStore RequestStore { get; set; } = null!;
         [Inject] private CollectionService CollectionService { get; set; } = null!;
         [Inject] private SettingsService SettingsService { get; set; } = null!;
         [Inject] private IJSRuntime JSRuntime { get; set; } = null!;
-        [Inject] private ZapService ZapService { get; set; } = null!;
         [Inject] private KeystoreService KeystoreService { get; set; } = null!;
 
         public List<RequestObject> OpenedTabs { get; set; } = new();
@@ -25,15 +26,7 @@ namespace RocketBoy.Components.Pages.Request
 
         private Settings Settings { get; set; } = new();
         private bool ShowDefaultHeaders { get; set; }
-        private bool isValidJson = true;
-
-        private string TagsAsString
-        {
-            get => string.Join(", ", SelectedTab.Tags);
-            set => SelectedTab.Tags =
-                value.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                     .Select(t => t.Trim()).ToList();
-        }
+        private bool isValidJson { get; set; } = true;
 
         protected override async Task OnInitializedAsync()
         {
@@ -42,54 +35,60 @@ namespace RocketBoy.Components.Pages.Request
             DefaultHeaders = GetHttpClientDefaultHeaders();
             NewTab();
             await KeystoreService.LoadKeys();
+
+            RequestStore.OnChange += PopulateImportedRequests;
+            PopulateImportedRequests();
         }
+
+        private void PopulateImportedRequests()
+        {
+            foreach (var req in RequestStore.Requests)
+                if (!OpenedTabs.Contains(req))
+                    OpenedTabs.Add(req);
+
+            if (OpenedTabs.Any() && SelectedTab == null)
+                SelectedTab = OpenedTabs.First();
+
+            StateHasChanged();
+        }
+
+        public void Dispose()
+            => RequestStore.OnChange -= PopulateImportedRequests;
 
         protected override async Task OnAfterRenderAsync(bool firstRender)
         {
             if (firstRender)
-            {
-                // Initialize CodeMirror on each .code-editor textarea
                 await JSRuntime.InvokeVoidAsync("initializeCodeEditors");
-            }
         }
 
-        public async Task ImportOpenApiFile(InputFileChangeEventArgs e)
+        private string TagsAsString
         {
-            using var stream = e.File.OpenReadStream();
-            var imported = await OpenApiImport.ImportAsync(stream);
-            OpenedTabs.AddRange(imported);
-            SelectedTab = OpenedTabs.Last();
-            StateHasChanged();
+            get => string.Join(", ", SelectedTab.Tags);
+            set => SelectedTab.Tags = value
+                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(t => t.Trim())
+                .ToList();
         }
 
-        public void OnCollectionSelected(ChangeEventArgs e)
-        {
-            var name = e.Value?.ToString();
-            var col = AllCollections.FirstOrDefault(c => c.Name == name);
-            if (col != null)
-            {
-                OpenedTabs = col.Requests.ToList();
-                SelectedTab = OpenedTabs.First();
-            }
-        }
+        #region Collections/Tabs
 
         public async Task ShowSaveCollectionDialog()
         {
             var name = await JSRuntime.InvokeAsync<string>("prompt", "Collection name:");
             if (string.IsNullOrWhiteSpace(name)) return;
 
-            var col = new Collection
-            {
-                Name = name,
-                Requests = OpenedTabs.ToList()
-            };
+            var col = new Collection { Name = name, Requests = OpenedTabs.ToList() };
             await CollectionService.SaveAsync(col);
             AllCollections = await CollectionService.LoadAllAsync();
         }
 
-        public void SelectTab(RequestObject tab)
+        public void SelectTab(RequestObject tab) => SelectedTab = tab;
+
+        public void NewTab()
         {
-            SelectedTab = tab;
+            var req = new RequestObject();
+            OpenedTabs.Add(req);
+            SelectedTab = req;
         }
 
         public async Task CloseTab(RequestObject tab)
@@ -106,96 +105,88 @@ namespace RocketBoy.Components.Pages.Request
                 SelectedTab = OpenedTabs.FirstOrDefault() ?? new RequestObject();
         }
 
-        public void AddHeader()
-            => SelectedTab.Headers.Add(new HeaderObject());
+        #endregion Collections/Tabs
 
-        public void RemoveHeader(HeaderObject h)
-            => SelectedTab.Headers.Remove(h);
+        #region Headers/JSON
 
-        public void ToggleDefaultHeaders()
-            => ShowDefaultHeaders = !ShowDefaultHeaders;
+        public void AddHeader() => SelectedTab.Headers.Add(new HeaderObject());
+
+        public void RemoveHeader(HeaderObject h) => SelectedTab.Headers.Remove(h);
+
+        public void ToggleDefaultHeaders() => ShowDefaultHeaders = !ShowDefaultHeaders;
 
         private void ValidateJson(ChangeEventArgs e)
         {
             var txt = e.Value?.ToString() ?? "";
-            isValidJson = !string.IsNullOrWhiteSpace(txt)
-                          && JsonDocument.Parse(txt) is not null;
-            if (isValidJson) SelectedTab.Body = txt;
+            try
+            {
+                JsonDocument.Parse(txt);
+                isValidJson = true;
+                SelectedTab.Body = txt;
+            }
+            catch
+            {
+                isValidJson = false;
+            }
         }
 
-        // **Automatically** run pre-tests, then send, then post-tests
+        #endregion Headers/JSON
+
+        #region Send + Tests
+
         public async Task SendRequest()
         {
-            // 1) run pre-request script
             await RunPreTests();
 
-            if (string.IsNullOrWhiteSpace(SelectedTab.Url))
-                return;
+            if (string.IsNullOrWhiteSpace(SelectedTab.Url)) return;
 
-            var handler = new HttpClientHandler
-            {
-                AllowAutoRedirect = true,
-                UseCookies = false
-            };
+            var sw = Stopwatch.StartNew();
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(100) };
 
-            using var client = new HttpClient(handler)
-            {
-                Timeout = TimeSpan.FromSeconds(100)
-            };
-
-            var httpReq = new HttpRequestMessage
-            {
-                Method = ConvertToHttpMethod(SelectedTab.MethodType),
-                RequestUri = new Uri(SelectedTab.Url)
-            };
+            var req = new HttpRequestMessage(
+                new HttpMethod(SelectedTab.MethodType),
+                SelectedTab.Url);
 
             if (!string.IsNullOrEmpty(SelectedTab.Body)
                 && new[] { "POST", "PUT", "PATCH" }.Contains(SelectedTab.MethodType))
             {
-                httpReq.Content = new StringContent(
-                    SelectedTab.Body,
-                    System.Text.Encoding.UTF8,
-                    "application/json");
+                req.Content = new StringContent(
+                    SelectedTab.Body, Encoding.UTF8, "application/json");
             }
 
-            foreach (var hdr in SelectedTab.Headers)
+            foreach (var h in SelectedTab.Headers.Where(x => !string.IsNullOrEmpty(x.Name)))
             {
-                if (!string.IsNullOrEmpty(hdr.Name)
-                    && !string.IsNullOrEmpty(hdr.Value))
-                {
-                    httpReq.Headers.Remove(hdr.Name);
-                    httpReq.Headers.Add(hdr.Name, hdr.Value);
-                }
+                req.Headers.Remove(h.Name);
+                req.Headers.Add(h.Name, h.Value);
             }
 
+            HttpResponseMessage resp;
             try
             {
-                var resp = await client.SendAsync(httpReq);
-                SelectedTab.Response = resp;
-                var text = await resp.Content.ReadAsStringAsync();
-                ResponseBodies[SelectedTab] = text;
+                resp = await client.SendAsync(req);
             }
             catch (Exception ex)
             {
                 ResponseBodies[SelectedTab] = $"Error: {ex.Message}";
+                SelectedTab.StatusCode = null;
+                SelectedTab.ResponseTime = sw.Elapsed;
+                return;
             }
+            sw.Stop();
 
-            // 2) run post-request script
+            SelectedTab.Response = resp;
+            SelectedTab.StatusCode = resp.StatusCode;
+            SelectedTab.ResponseTime = sw.Elapsed;
+            ResponseBodies[SelectedTab] = await resp.Content.ReadAsStringAsync();
+
             await RunPostTests();
         }
 
         private async Task RunPreTests()
         {
             var logs = new List<string>();
-
-            var engine = new Jint.Engine()
-                .SetValue("console", new
-                {
-                    log = new Action<object?>(arg =>
-                    {
-                        logs.Add(arg?.ToString() ?? "null");
-                    })
-                })
+            var engine = new Engine()
+                .SetValue("console", new { log = new Action<object?>(x => logs.Add(x?.ToString() ?? "null")) })
                 .SetValue("request", SelectedTab);
 
             try
@@ -218,14 +209,8 @@ namespace RocketBoy.Components.Pages.Request
                 ? ""
                 : await SelectedTab.Response.Content.ReadAsStringAsync();
 
-            var engine = new Jint.Engine()
-                .SetValue("console", new
-                {
-                    log = new Action<object?>(arg =>
-                    {
-                        logs.Add(arg?.ToString() ?? "null");
-                    })
-                })
+            var engine = new Engine()
+                .SetValue("console", new { log = new Action<object?>(x => logs.Add(x?.ToString() ?? "null")) })
                 .SetValue("responseBody", body)
                 .SetValue("response", SelectedTab.Response);
 
@@ -242,39 +227,25 @@ namespace RocketBoy.Components.Pages.Request
             }
         }
 
+        #endregion Send + Tests
+
+        #region Save
+
         public async Task SaveRequest()
         {
             var dir = Settings.RequestsSaveLocation;
             Directory.CreateDirectory(dir);
-
-            var safeName = string.Join("_", SelectedTab.Name
-                .Split(Path.GetInvalidFileNameChars()));
-            var path = Path.Combine(dir, $"{safeName}.json");
-
+            var safe = string.Join("_", SelectedTab.Name.Split(Path.GetInvalidFileNameChars()));
+            var path = Path.Combine(dir, $"{safe}.json");
             var opts = new JsonSerializerOptions { WriteIndented = true };
-            var json = JsonSerializer.Serialize(SelectedTab, opts);
-            await File.WriteAllTextAsync(path, json);
-
+            await File.WriteAllTextAsync(path, JsonSerializer.Serialize(SelectedTab, opts));
             SelectedTab.Saved = true;
             await JSRuntime.InvokeVoidAsync("alert", $"Saved to {path}");
         }
 
-        public void NewTab()
-        {
-            var req = new RequestObject();
-            OpenedTabs.Add(req);
-            SelectedTab = req;
-        }
+        #endregion Save
 
-        private static HttpMethod ConvertToHttpMethod(string m) => m switch
-        {
-            "POST" => HttpMethod.Post,
-            "PUT" => HttpMethod.Put,
-            "PATCH" => HttpMethod.Patch,
-            "DELETE" => HttpMethod.Delete,
-            "OPTIONS" => HttpMethod.Options,
-            _ => HttpMethod.Get
-        };
+        #region Helpers
 
         private static List<HeaderObject> GetHttpClientDefaultHeaders()
         {
@@ -284,12 +255,21 @@ namespace RocketBoy.Components.Pages.Request
                 new() { Name="Accept",       Value="application/json" },
                 new() { Name="User-Agent",   Value="RocketBoy/1.0" }
             };
-
-            var client = new HttpClient();
+            using var client = new HttpClient();
             foreach (var h in client.DefaultRequestHeaders)
                 foreach (var v in h.Value)
                     list.Add(new HeaderObject { Name = h.Key, Value = v });
             return list;
         }
+
+        private string GetStatusBadge()
+            => SelectedTab.StatusCode switch
+            {
+                var c when ((int?)c >= 200 && (int?)c < 300) => "bg-success",
+                var c when ((int?)c >= 300 && (int?)c < 400) => "bg-warning",
+                _ => "bg-danger"
+            };
+
+        #endregion Helpers
     }
 }

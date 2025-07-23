@@ -23,6 +23,8 @@ namespace RocketBoy
             builder.Services.AddSingleton<SettingsService>();
             builder.Services.AddScoped<CollectionService>();
             builder.Services.AddScoped<OpenApiImportService>();
+            builder.Services.AddScoped<RequestStore>();
+
 #if DEBUG
             builder.Services.AddBlazorWebViewDeveloperTools();
             builder.Logging.AddDebug();

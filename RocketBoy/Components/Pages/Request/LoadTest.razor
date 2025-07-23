@@ -1,0 +1,217 @@
+@using RocketBoy.Components.Pages.Models
+@using System.Text.RegularExpressions
+@using System.Text.Json
+@inject IJSRuntime JSRuntime
+
+@if (!isK6Available)
+{
+    <div class="alert alert-warning">
+        <strong>Load testing disabled:</strong> k6 command-line tool not found.
+        <br />Install k6 (<a href="https://k6.io/docs/getting-started/installation" target="_blank">docs</a>) to enable.
+    </div>
+}
+else
+{
+    @if (ShowLoadTestDialog)
+    {
+        <div class="w-100">
+            <EditForm Model="LoadTestFormModel" OnValidSubmit="HandleSubmit">
+                <div class="modal show d-block" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Load Test Parameters</h5>
+                                <button type="button" class="btn-close" @onclick="ShowDialogFalse"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="form-group">
+                                    <label>Virtual Users</label>
+                                    <InputNumber @bind-Value="LoadTestFormModel.VirtualUsers"
+                                                 Min="1" Max="1000"
+                                                 class="form-control" />
+                                    @if (LoadTestFormModel.VirtualUsers < 1)
+                                    {
+                                        <span class="text-danger">Must be at least 1</span>
+                                    }
+                                </div>
+                                <div class="form-group">
+                                    <label>Duration</label>
+                                    <InputText @bind-Value="LoadTestFormModel.Duration"
+                                               class="form-control" />
+                                    @if (!Regex.IsMatch(LoadTestFormModel.Duration, @"^\d+(s|m|h)$"))
+                                    {
+                                        <span class="text-danger">
+                                            Valid format: e.g. <code>30s</code>, <code>1m</code>
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="submit"
+                                        class="btn btn-primary d-block w-100">
+                                    Start Test
+                                </button>
+                                <button type="button"
+                                        class="btn btn-secondary d-block w-100 mt-2"
+                                        @onclick="ShowDialogFalse">
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </EditForm>
+        </div>
+    }
+    else
+    {
+        <button class="btn btn-primary d-block w-100"
+                @onclick="() => ShowLoadTestDialog = true">
+            Start Load Test
+        </button>
+        @if (LoadTestInProgress)
+        {
+            <div class="alert alert-info mt-4">
+                <h4>Load Test in Progress</h4>
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading…</span>
+                </div>
+                <pre>@LoadTestProgressOutput</pre>
+            </div>
+        }
+        @if (HasRunLoadTest && !string.IsNullOrEmpty(LoadTestOutput))
+        {
+            <div class="alert alert-success mt-4">
+                <h4>Load Test Results</h4>
+                <pre>@LoadTestOutput</pre>
+            </div>
+        }
+    }
+}
+
+@code {
+    [Parameter] public RequestObject SelectedTab { get; set; } = default!;
+    private LoadTestParameters LoadTestFormModel { get; set; } = new();
+    private bool ShowLoadTestDialog { get; set; }
+    private bool LoadTestInProgress { get; set; }
+    private string LoadTestProgressOutput { get; set; } = "";
+    private string? LoadTestOutput { get; set; }
+    private bool HasRunLoadTest { get; set; }
+
+    private bool isK6Available;
+
+    protected override void OnInitialized()
+    {
+        // detect k6 on PATH
+        try
+        {
+            var p = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo("k6", "version")
+                {
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+            p.Start();
+            p.WaitForExit(2000);
+            isK6Available = p.ExitCode == 0;
+        }
+        catch
+        {
+            isK6Available = false;
+        }
+    }
+
+    private void ShowDialogFalse() => ShowLoadTestDialog = false;
+
+    private async Task HandleSubmit(EditContext _)
+        => await RunLoadTest();
+
+    private async Task RunLoadTest()
+    {
+        if (LoadTestFormModel.VirtualUsers < 1 ||
+            !Regex.IsMatch(LoadTestFormModel.Duration, @"^\d+(s|m|h)$"))
+            return;
+
+        SelectedTab.LoadTestParameters = LoadTestFormModel;
+        ShowLoadTestDialog = false;
+        LoadTestInProgress = true;
+        LoadTestProgressOutput = "Load test is starting…\n";
+        HasRunLoadTest = false;
+        StateHasChanged();
+
+        try
+        {
+            var scriptPath = GenerateTestScript(
+                LoadTestFormModel.VirtualUsers,
+                LoadTestFormModel.Duration,
+                SelectedTab.Url!,
+                SelectedTab.MethodType,
+                JsonSerializer.Serialize(SelectedTab.Headers),
+                SelectedTab.Body ?? "");
+            var psi = new System.Diagnostics.ProcessStartInfo("k6", $"run {scriptPath}")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            var proc = System.Diagnostics.Process.Start(psi)!;
+            while (!proc.HasExited)
+            {
+                var line = await proc.StandardOutput.ReadLineAsync();
+                if (!string.IsNullOrEmpty(line))
+                {
+                    LoadTestProgressOutput += line + "\n";
+                    StateHasChanged();
+                }
+            }
+            var remaining = await proc.StandardOutput.ReadToEndAsync();
+            var errors = await proc.StandardError.ReadToEndAsync();
+            proc.WaitForExit();
+            LoadTestInProgress = false;
+
+            LoadTestOutput = LoadTestProgressOutput
+                             + remaining
+                             + (!string.IsNullOrEmpty(errors)
+                                ? $"\nErrors:\n{errors}"
+                                : "");
+            HasRunLoadTest = true;
+        }
+        catch (Exception ex)
+        {
+            LoadTestOutput = $"Error running k6: {ex.Message}";
+            HasRunLoadTest = true;
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+
+    private static string GenerateTestScript(
+        int vus, string duration, string url, string method,
+        string headersJson, string body)
+    {
+        var tplPath = Path.Combine(
+            AppContext.BaseDirectory,
+            "wwwroot/js/k6_test_template.js");
+        var template = File.ReadAllText(tplPath);
+        var bodyVal = string.IsNullOrEmpty(body) ? "null" : $"`{body}`";
+        var script = template
+            .Replace("__VUS__", vus.ToString())
+            .Replace("__DURATION__", duration)
+            .Replace("__URL__", url)
+            .Replace("__METHOD__", method)
+            .Replace("__HEADERS__", headersJson)
+            .Replace("__BODY__", bodyVal);
+        var outPath = Path.Combine(
+            FileSystem.AppDataDirectory,
+            "k6_test_script.js");
+        File.WriteAllText(outPath, script);
+        return outPath;
+    }
+}
