@@ -15,6 +15,10 @@ public class RequestObject : IEventable
     public string? PostRequestTestJS { get; set; }
     public string? PreRequestTestJS { get; set; }
 
+    // Test results properties
+    public string? PreTestResults { get; set; }
+    public string? PostTestResults { get; set; }
+
     // OpenAPI-specific properties
     public string Summary { get; set; } = "";
 

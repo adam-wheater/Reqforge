@@ -1,286 +1,295 @@
 ﻿using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.JSInterop;
 using RocketBoy.Components.Pages.Models;
 using RocketBoy.Models;
 using RocketBoy.Services;
-using System.Text;
 using System.Text.Json;
 
 namespace RocketBoy.Components.Pages.Request
 {
     public partial class Home : ComponentBase
     {
-        // Dependencies and services
-        private DotNetObjectReference<Home>? objRef;
+        [Inject] private OpenApiImportService OpenApiImport { get; set; } = null!;
+        [Inject] private CollectionService CollectionService { get; set; } = null!;
+        [Inject] private SettingsService SettingsService { get; set; } = null!;
+        [Inject] private IJSRuntime JSRuntime { get; set; } = null!;
+        [Inject] private ZapService ZapService { get; set; } = null!;
+        [Inject] private KeystoreService KeystoreService { get; set; } = null!;
 
-        [Inject] public IJSRuntime JSRuntime { get; set; } = null!;
-        [Inject] public ZapService ZapService { get; set; } = null!;
-        [Inject] public KeystoreService KeystoreService { get; set; } = null!;
-        [Inject] public SettingsService SettingsService { get; set; } = null!;
-
-        private Settings Settings { get; set; } = new Settings();
         public List<RequestObject> OpenedTabs { get; set; } = new();
-        public RequestObject? SelectedTab { get; set; } = null;
-        public bool ShowDefaultHeaders { get; set; } = false;
-        public List<HeaderObject> DefaultHeaders { get; set; } = GetHttpClientDefaultHeaders();
+        public RequestObject SelectedTab { get; set; } = new();
+        public List<Collection> AllCollections { get; set; } = new();
+        public List<HeaderObject> DefaultHeaders { get; set; } = new();
+        public Dictionary<RequestObject, string> ResponseBodies { get; set; } = new();
+
+        private Settings Settings { get; set; } = new();
+        private bool ShowDefaultHeaders { get; set; }
         private bool isValidJson = true;
-        private string ZapApiKey { get; set; }
-        private string ZapBaseUrl { get; set; }
-        public bool HasGeneratedOpenApiSpec { get; set; } = false;
-        public bool HasRunSecurityTest { get; set; } = false;
 
-        private bool IsK6Available()
+        private string TagsAsString
         {
-            try
-            {
-                var k6Path = Environment.GetEnvironmentVariable("PATH")?.Split(Path.PathSeparator)
-                    .Select(p => Path.Combine(p, "k6.exe")).FirstOrDefault(File.Exists);
-                return !string.IsNullOrEmpty(k6Path);
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private bool IsZapAvailable()
-        {
-            if (string.IsNullOrWhiteSpace(ZapApiKey) || string.IsNullOrWhiteSpace(ZapBaseUrl))
-            {
-                return false;
-            }
-
-            try
-            {
-                HttpClient httpClient = new();
-                return ZapService.GetVersion(httpClient).Result;
-            }
-            catch
-            {
-                return false;
-            }
+            get => string.Join(", ", SelectedTab.Tags);
+            set => SelectedTab.Tags =
+                value.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                     .Select(t => t.Trim()).ToList();
         }
 
         protected override async Task OnInitializedAsync()
         {
-            await KeystoreService.LoadKeys();
-            ZapApiKey = KeystoreService.GetKey("ZapApiKey") ?? string.Empty;
-            ZapBaseUrl = KeystoreService.GetKey("ZapBaseUrl") ?? string.Empty;
-
             Settings = await SettingsService.LoadSettingsAsync();
-            ShowDefaultHeaders = Settings.ShowDefaultHeaders;
-
-            if (OpenedTabs == null || OpenedTabs.Count == 0) { NewTab(); }
+            AllCollections = await CollectionService.LoadAllAsync();
+            DefaultHeaders = GetHttpClientDefaultHeaders();
+            NewTab();
+            await KeystoreService.LoadKeys();
         }
 
         protected override async Task OnAfterRenderAsync(bool firstRender)
         {
             if (firstRender)
             {
-                objRef = DotNetObjectReference.Create(this);
-                await JSRuntime.InvokeVoidAsync("setupKeyHandler", objRef);
+                // Initialize CodeMirror on each .code-editor textarea
+                await JSRuntime.InvokeVoidAsync("initializeCodeEditors");
             }
         }
 
-        public static List<HeaderObject> GetHttpClientDefaultHeaders()
+        public async Task ImportOpenApiFile(InputFileChangeEventArgs e)
         {
-            var headerItems = new List<HeaderObject>
-            {
-                new HeaderObject { Name = "Content-Type", Value = "application/json" },
-                new HeaderObject { Name = "Accept", Value = "application/json" },
-                new HeaderObject { Name = "User-Agent", Value = "RocketBoy/1.0" }
-            };
-
-            HttpClient httpClient = new();
-            foreach (var header in httpClient.DefaultRequestHeaders)
-            {
-                if (!string.IsNullOrEmpty(header.Key) && header.Value != null && header.Value.Any())
-                {
-                    foreach (var value in header.Value)
-                    {
-                        headerItems.Add(new HeaderObject { Name = header.Key, Value = value });
-                    }
-                }
-            }
-
-            return headerItems;
+            using var stream = e.File.OpenReadStream();
+            var imported = await OpenApiImport.ImportAsync(stream);
+            OpenedTabs.AddRange(imported);
+            SelectedTab = OpenedTabs.Last();
+            StateHasChanged();
         }
 
+        public void OnCollectionSelected(ChangeEventArgs e)
+        {
+            var name = e.Value?.ToString();
+            var col = AllCollections.FirstOrDefault(c => c.Name == name);
+            if (col != null)
+            {
+                OpenedTabs = col.Requests.ToList();
+                SelectedTab = OpenedTabs.First();
+            }
+        }
+
+        public async Task ShowSaveCollectionDialog()
+        {
+            var name = await JSRuntime.InvokeAsync<string>("prompt", "Collection name:");
+            if (string.IsNullOrWhiteSpace(name)) return;
+
+            var col = new Collection
+            {
+                Name = name,
+                Requests = OpenedTabs.ToList()
+            };
+            await CollectionService.SaveAsync(col);
+            AllCollections = await CollectionService.LoadAllAsync();
+        }
+
+        public void SelectTab(RequestObject tab)
+        {
+            SelectedTab = tab;
+        }
+
+        public async Task CloseTab(RequestObject tab)
+        {
+            if (!tab.Saved && tab.ChangedWithoutSave)
+            {
+                bool save = await JSRuntime.InvokeAsync<bool>(
+                    "confirm", "Unsaved changes—save before closing?");
+                if (save) await SaveRequest();
+            }
+
+            OpenedTabs.Remove(tab);
+            if (SelectedTab == tab)
+                SelectedTab = OpenedTabs.FirstOrDefault() ?? new RequestObject();
+        }
+
+        public void AddHeader()
+            => SelectedTab.Headers.Add(new HeaderObject());
+
+        public void RemoveHeader(HeaderObject h)
+            => SelectedTab.Headers.Remove(h);
+
+        public void ToggleDefaultHeaders()
+            => ShowDefaultHeaders = !ShowDefaultHeaders;
+
+        private void ValidateJson(ChangeEventArgs e)
+        {
+            var txt = e.Value?.ToString() ?? "";
+            isValidJson = !string.IsNullOrWhiteSpace(txt)
+                          && JsonDocument.Parse(txt) is not null;
+            if (isValidJson) SelectedTab.Body = txt;
+        }
+
+        // **Automatically** run pre-tests, then send, then post-tests
         public async Task SendRequest()
         {
-            if (SelectedTab == null || string.IsNullOrEmpty(SelectedTab.Url))
-            {
-                Console.WriteLine("Request cannot be sent: Invalid input.");
-                return;
-            }
+            // 1) run pre-request script
+            await RunPreTests();
 
-            HttpClientHandler handler = new HttpClientHandler()
+            if (string.IsNullOrWhiteSpace(SelectedTab.Url))
+                return;
+
+            var handler = new HttpClientHandler
             {
                 AllowAutoRedirect = true,
                 UseCookies = false
             };
 
-            HttpClient httpClient = new HttpClient(handler)
+            using var client = new HttpClient(handler)
             {
-                Timeout = TimeSpan.FromSeconds(100)  // Increase the timeout if needed
+                Timeout = TimeSpan.FromSeconds(100)
             };
 
-            HttpRequestMessage request = new()
+            var httpReq = new HttpRequestMessage
             {
                 Method = ConvertToHttpMethod(SelectedTab.MethodType),
                 RequestUri = new Uri(SelectedTab.Url)
             };
 
-            if ((SelectedTab.MethodType == "POST" || SelectedTab.MethodType == "PUT" || SelectedTab.MethodType == "PATCH")
-                && !string.IsNullOrEmpty(SelectedTab.Body))
+            if (!string.IsNullOrEmpty(SelectedTab.Body)
+                && new[] { "POST", "PUT", "PATCH" }.Contains(SelectedTab.MethodType))
             {
-                request.Content = new StringContent(SelectedTab.Body, Encoding.UTF8, "application/json");
+                httpReq.Content = new StringContent(
+                    SelectedTab.Body,
+                    System.Text.Encoding.UTF8,
+                    "application/json");
             }
 
-            foreach (var header in SelectedTab.Headers)
+            foreach (var hdr in SelectedTab.Headers)
             {
-                if (!string.IsNullOrEmpty(header.Name) && !string.IsNullOrEmpty(header.Value))
+                if (!string.IsNullOrEmpty(hdr.Name)
+                    && !string.IsNullOrEmpty(hdr.Value))
                 {
-                    request.Headers.Add(header.Name, header.Value);
+                    httpReq.Headers.Remove(hdr.Name);
+                    httpReq.Headers.Add(hdr.Name, hdr.Value);
                 }
             }
 
             try
             {
-                SelectedTab.Response = await httpClient.SendAsync(request);
-                Console.WriteLine($"Request sent successfully: {SelectedTab.Response.StatusCode}");
-            }
-            catch (HttpRequestException httpRequestException)
-            {
-                Console.WriteLine($"An HTTP error occurred while sending the request: {httpRequestException.Message}");
-            }
-            catch (TaskCanceledException taskCanceledException)
-            {
-                if (!taskCanceledException.CancellationToken.IsCancellationRequested)
-                {
-                    Console.WriteLine("The request timed out.");
-                }
-                else
-                {
-                    Console.WriteLine($"The request was canceled: {taskCanceledException.Message}");
-                }
+                var resp = await client.SendAsync(httpReq);
+                SelectedTab.Response = resp;
+                var text = await resp.Content.ReadAsStringAsync();
+                ResponseBodies[SelectedTab] = text;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"An error occurred while sending the request: {ex.Message}");
+                ResponseBodies[SelectedTab] = $"Error: {ex.Message}";
             }
+
+            // 2) run post-request script
+            await RunPostTests();
         }
 
-        private void ValidateJson(ChangeEventArgs e)
+        private async Task RunPreTests()
         {
-            var jsonText = e.Value?.ToString();
-            isValidJson = IsValidJson(jsonText ?? "");
-            SelectedTab.Body = jsonText ?? "";
-        }
+            var logs = new List<string>();
 
-        private bool IsValidJson(string input)
-        {
-            if (string.IsNullOrWhiteSpace(input))
-                return false;
+            var engine = new Jint.Engine()
+                .SetValue("console", new
+                {
+                    log = new Action<object?>(arg =>
+                    {
+                        logs.Add(arg?.ToString() ?? "null");
+                    })
+                })
+                .SetValue("request", SelectedTab);
 
             try
             {
-                using (var doc = JsonDocument.Parse(input))
-                {
-                    return true;
-                }
+                engine.Execute(SelectedTab.PreRequestTestJS ?? "");
+                SelectedTab.PreTestResults = logs.Count > 0
+                    ? string.Join("\n", logs)
+                    : "[no output]";
             }
-            catch (JsonException)
+            catch (Exception ex)
             {
-                return false;
+                SelectedTab.PreTestResults = $"Error: {ex.Message}";
             }
         }
 
-        public HttpMethod ConvertToHttpMethod(string type) => type switch
+        private async Task RunPostTests()
         {
-            "GET" => HttpMethod.Get,
-            "POST" => HttpMethod.Post,
-            "PUT" => HttpMethod.Put,
-            "DELETE" => HttpMethod.Delete,
-            "PATCH" => HttpMethod.Patch,
-            "OPTIONS" => HttpMethod.Options,
-            _ => HttpMethod.Get
-        };
+            var logs = new List<string>();
+            var body = SelectedTab.Response is null
+                ? ""
+                : await SelectedTab.Response.Content.ReadAsStringAsync();
 
-        public void SelectTab(RequestObject requestObject)
+            var engine = new Jint.Engine()
+                .SetValue("console", new
+                {
+                    log = new Action<object?>(arg =>
+                    {
+                        logs.Add(arg?.ToString() ?? "null");
+                    })
+                })
+                .SetValue("responseBody", body)
+                .SetValue("response", SelectedTab.Response);
+
+            try
+            {
+                engine.Execute(SelectedTab.PostRequestTestJS ?? "");
+                SelectedTab.PostTestResults = logs.Count > 0
+                    ? string.Join("\n", logs)
+                    : "[no output]";
+            }
+            catch (Exception ex)
+            {
+                SelectedTab.PostTestResults = $"Error: {ex.Message}";
+            }
+        }
+
+        public async Task SaveRequest()
         {
-            SelectedTab = requestObject;
-            HasGeneratedOpenApiSpec = false;
-            HasRunSecurityTest = false;
+            var dir = Settings.RequestsSaveLocation;
+            Directory.CreateDirectory(dir);
+
+            var safeName = string.Join("_", SelectedTab.Name
+                .Split(Path.GetInvalidFileNameChars()));
+            var path = Path.Combine(dir, $"{safeName}.json");
+
+            var opts = new JsonSerializerOptions { WriteIndented = true };
+            var json = JsonSerializer.Serialize(SelectedTab, opts);
+            await File.WriteAllTextAsync(path, json);
+
+            SelectedTab.Saved = true;
+            await JSRuntime.InvokeVoidAsync("alert", $"Saved to {path}");
         }
 
         public void NewTab()
         {
-            RequestObject requestObject = new();
-            OpenedTabs.Add(requestObject);
-            SelectedTab = requestObject;
-            HasGeneratedOpenApiSpec = false;
-            HasRunSecurityTest = false;
+            var req = new RequestObject();
+            OpenedTabs.Add(req);
+            SelectedTab = req;
         }
 
-        [JSInvokable]
-        public async Task HandleCtrlS()
+        private static HttpMethod ConvertToHttpMethod(string m) => m switch
         {
-            Console.WriteLine("Ctrl + S was pressed in the context of the component.");
-            //save
-        }
+            "POST" => HttpMethod.Post,
+            "PUT" => HttpMethod.Put,
+            "PATCH" => HttpMethod.Patch,
+            "DELETE" => HttpMethod.Delete,
+            "OPTIONS" => HttpMethod.Options,
+            _ => HttpMethod.Get
+        };
 
-        public async Task CloseTab(RequestObject requestObject)
+        private static List<HeaderObject> GetHttpClientDefaultHeaders()
         {
-            if (!requestObject.Saved || requestObject.ChangedWithoutSave)
+            var list = new List<HeaderObject>
             {
-                var confirmed = await JSRuntime.InvokeAsync<bool>("confirmCloseTab", "You have unsaved changes. Do you want to save them before closing?");
-                if (confirmed)
-                {
-                    //save
-                }
-            }
+                new() { Name="Content-Type", Value="application/json" },
+                new() { Name="Accept",       Value="application/json" },
+                new() { Name="User-Agent",   Value="RocketBoy/1.0" }
+            };
 
-            OpenedTabs.Remove(requestObject);
-
-            if (requestObject == SelectedTab)
-            {
-                SelectedTab = null;
-            }
-
-            StateHasChanged();
-        }
-
-        public void AddHeader()
-        {
-            if (SelectedTab != null)
-            {
-                SelectedTab.Headers.Add(new HeaderObject());
-            }
-        }
-
-        public void RemoveHeader(HeaderObject header)
-        {
-            if (SelectedTab != null)
-            {
-                SelectedTab.Headers.Remove(header);
-            }
-        }
-
-        public void ToggleDefaultHeaders()
-        {
-            ShowDefaultHeaders = !ShowDefaultHeaders;
-        }
-
-        private string TagsAsString
-        {
-            get => string.Join(", ", SelectedTab.Tags);
-            set
-            {
-                SelectedTab.Tags = value.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                                        .Select(tag => tag.Trim())
-                                        .ToList();
-            }
+            var client = new HttpClient();
+            foreach (var h in client.DefaultRequestHeaders)
+                foreach (var v in h.Value)
+                    list.Add(new HeaderObject { Name = h.Key, Value = v });
+            return list;
         }
     }
 }

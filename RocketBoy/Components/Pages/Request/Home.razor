@@ -1,175 +1,173 @@
 ﻿@page "/"
-@layout MainLayout
-@using System.Text.Json
-@using System.Diagnostics
-@using Microsoft.AspNetCore.Components
-@using Microsoft.AspNetCore.Components.Forms
-@using System.Text
-@using System.Text.RegularExpressions
-@using RocketBoy.Components.Layout
+@namespace RocketBoy.Components.Pages.Request
+@using RocketBoy.Services
 
-<div class="container-fluid d-flex p-0 h-100">
-	<div class="content flex-grow-1 p-3" style="overflow-y: auto;">
-		<ul class="nav nav-tabs">
-			@foreach (var tab in OpenedTabs)
-			{
-				<li class="nav-item" role="presentation">
-					<button class="nav-link @(tab == SelectedTab ? "active" : "")" type="button" role="tab" @onclick="() => SelectTab(tab)">
-						<div class="text-content">@tab.Name</div>
-						<div class="end-content">
-							@(!tab.Saved || tab.ChangedWithoutSave ? "⬤" : "")
-							<a class="close-button" @onclick="() => CloseTab(tab)" @onclick:preventDefault>x</a>
-						</div>
-					</button>
-				</li>
-			}
+<InputFile OnChange="ImportOpenApiFile" class="mb-3" />
 
-			<li class="nav-item" role="presentation">
-				<button class="nav-link" type="button" role="tab" @onclick="NewTab">+</button>
-			</li>
-		</ul>
-		<div class="tab-content">
-			@if (SelectedTab != null)
-			{
-				<div class="row mb-3">
-					<div class="col-md-12">
-						<label>Name</label>
-						<InputText @bind-Value="SelectedTab.Name" DisplayName="Name" class="form-control" />
-					</div>
-				</div>
+<select @onchange="OnCollectionSelected" class="form-select mb-3">
+    <option value="">— Load Collection —</option>
+    @foreach (var col in AllCollections)
+    {
+        <option value="@col.Name">@col.Name</option>
+    }
+</select>
 
-				<div class="row mb-3">
-					<div class="col-md-3">
-						<label>Method</label>
-						<InputSelect @bind-Value="SelectedTab.MethodType" class="form-control">
-							<option value="GET">GET</option>
-							<option value="POST">POST</option>
-							<option value="PATCH">PATCH</option>
-							<option value="PUT">PUT</option>
-							<option value="DELETE">DELETE</option>
-							<option value="OPTIONS">OPTIONS</option>
-						</InputSelect>
-					</div>
-					<div class="col-md-9">
-						<label>URI</label>
-						<InputText @bind-Value="SelectedTab.Url" DisplayName="URI" class="form-control" />
-					</div>
-				</div>
-				<div class="row mb-3">
-					<div class="col-md-4">
-						<label>Summary</label>
-						<InputTextArea @bind-Value="SelectedTab.Summary" Placeholder="Enter a brief summary" class="form-control" />
-					</div>
-					<div class="col-md-8">
-						<label>Description</label>
-						<InputTextArea @bind-Value="SelectedTab.Description" Placeholder="Enter a brief description" class="form-control" />
-					</div>
-				</div>
-				<div class="row mb-3">
-					<div class="col-md-12">
-						<label>Tags (comma-separated)</label>
-						<InputText @bind-Value="TagsAsString" Placeholder="Tags (comma-separated)" class="form-control" />
-					</div>
-				</div>
-				<div class="row mb-3">
-					<div class="col-md-12">
-						<label>Body (JSON required)</label>
-						<InputTextArea @bind-Value="SelectedTab.Body" @oninput="ValidateJson" class="form-control" rows="5" placeholder="Enter JSON body here..." />
-						@if (!isValidJson && !string.IsNullOrEmpty(SelectedTab.Body))
-						{
-							<p class="text-danger">Invalid JSON format.</p>
-						}
-					</div>
-				</div>
-				<div class="row mb-3">
-					<div class="col-md-12">
-						<h3>Headers</h3>
-						<div class="col-md-12 d-flex mb-3" style="column-gap: 10px;">
-							<button class="btn btn-secondary mr-3" @onclick="ToggleDefaultHeaders">
-								@(ShowDefaultHeaders ? "Hide Default Headers" : "Show Default Headers")
-							</button>
-							<button class="btn btn-secondary" @onclick="AddHeader">+ Add Header</button>
-						</div>
-						@if (ShowDefaultHeaders)
-						{
-							@foreach (var header in DefaultHeaders)
-							{
-								<div class="row mb-2">
-									<div class="col">
-										<InputText @bind-Value="header.Name" placeholder="Default Header Name" class="form-control" disabled />
-									</div>
-									<div class="col">
-										<InputText @bind-Value="header.Value" placeholder="Header Value" class="form-control" />
-									</div>
-								</div>
-							}
-						}
+<button class="btn btn-sm btn-outline-primary mb-3"
+        @onclick="ShowSaveCollectionDialog">
+    Save Current as Collection
+</button>
 
-						@foreach (var header in SelectedTab.Headers)
-						{
-							<div class="row mb-2">
-								<div class="col">
-									<InputText @bind-Value="header.Name" placeholder="Header Name" class="form-control" />
-								</div>
-								<div class="col">
-									<InputText @bind-Value="header.Value" placeholder="Header Value" class="form-control" />
-								</div>
-								<div class="col-auto">
-									<button class="btn btn-danger" @onclick="() => RemoveHeader(header)">Remove</button>
-								</div>
-							</div>
-						}
-					</div>
-
-				</div>
-				<div class="row mb-3">
-
-					<div class="mb-2">
-						<button class="btn btn-primary d-block w-100" @onclick="SendRequest">SEND</button>
-
-					</div>
-					
-					@if(IsK6Available())
-					{
-					   <div class="mb-2">
-						<LoadTestComponent SelectedTab="SelectedTab" />
-						</div> 
-					}
-					
-
-					@if (IsZapAvailable())
-					{
-						<div class="mb-2">
-								<ZapSecurityTestComponent SelectedTab="SelectedTab" />
-						</div>
-					}
-					
-					<div class="mb-2">
-						<OpenApiExportComponent OpenApiSpecJson="openApiSpecJson" HasGeneratedOpenApiSpec="HasGeneratedOpenApiSpec" />
-					</div>
-
-				</div>
-				<div class="row mb-3">
-					<div class="col-md-12">
-						<h1>Response</h1>
-						@if (SelectedTab.Response != null)
-						{
-							<div>
-								<h2>HTTP RESPONSE</h2>
-								@(JsonSerializer.Serialize(SelectedTab.Response))
-							</div>
-							<div>
-								<h2>BODY RESPONSE</h2>
-								@(SelectedTab.Response.Content.ReadAsStringAsync().Result)
-							</div>
-						}
-						else
-						{
-							<p>Trigger a request to see a response.</p>
-						}
-					</div>
-				</div>
-			}
-		</div>
-	</div>
+<div class="d-flex flex-wrap mb-3">
+    @foreach (var tab in OpenedTabs)
+    {
+        <div class="me-2 mb-1 d-flex align-items-center">
+            <button class="btn @(tab == SelectedTab ? "btn-primary" : "btn-outline-primary")"
+                    @onclick="() => SelectTab(tab)">
+                @tab.Name
+            </button>
+            <button type="button"
+                    class="btn-close ms-1"
+                    aria-label="Close"
+                    @onclick="() => CloseTab(tab)" />
+        </div>
+    }
+    <button class="btn btn-outline-secondary mb-1" @onclick="NewTab">
+        + New Tab
+    </button>
 </div>
+
+@if (SelectedTab != null)
+{
+    <!-- Method + URL -->
+    <div class="input-group mb-3">
+        <InputSelect @bind-Value="SelectedTab.MethodType"
+                     class="form-select"
+                     style="width:100px">
+            <option>GET</option>
+            <option>POST</option>
+            <option>PUT</option>
+            <option>PATCH</option>
+            <option>DELETE</option>
+            <option>OPTIONS</option>
+        </InputSelect>
+        <InputText @bind-Value="SelectedTab.Url"
+                   placeholder="Enter request URL"
+                   class="form-control" />
+    </div>
+
+    <!-- Extra Settings -->
+    <details class="mb-3">
+        <summary>Additional Settings</summary>
+        <div class="p-3 border rounded">
+            <div class="mb-2">
+                <label>Description</label>
+                <InputTextArea @bind-Value="SelectedTab.Description"
+                               class="form-control" />
+            </div>
+            <div class="mb-2">
+                <label>Tags (comma-separated)</label>
+                <InputText @bind-Value="TagsAsString"
+                           class="form-control" />
+            </div>
+        </div>
+    </details>
+
+    <!-- Headers -->
+    <div class="mb-3">
+        <button class="btn btn-sm btn-outline-secondary me-2"
+                @onclick="AddHeader">
+            Add Header
+        </button>
+        <button class="btn btn-sm btn-outline-secondary"
+                @onclick="ToggleDefaultHeaders">
+            @(ShowDefaultHeaders ? "Hide" : "Show") Default Headers
+        </button>
+    </div>
+
+    @if (ShowDefaultHeaders)
+    {
+        @foreach (var hdr in DefaultHeaders)
+        {
+            <div class="input-group mb-2">
+                <InputText @bind-Value="hdr.Name"
+                           class="form-control" disabled />
+                <InputText @bind-Value="hdr.Value"
+                           class="form-control" disabled />
+            </div>
+        }
+    }
+
+    @foreach (var header in SelectedTab.Headers)
+    {
+        <div class="input-group mb-2">
+            <InputText @bind-Value="header.Name"
+                       class="form-control"
+                       placeholder="Header Name" />
+            <InputText @bind-Value="header.Value"
+                       class="form-control"
+                       placeholder="Header Value" />
+            <button class="btn btn-outline-danger"
+                    @onclick="() => RemoveHeader(header)">
+                Remove
+            </button>
+        </div>
+    }
+
+    <!-- Body -->
+    @if (SelectedTab.MethodType is "POST" or "PUT" or "PATCH")
+    {
+        <div class="mb-3">
+            <label>Body</label>
+            <textarea class="form-control"
+                      rows="5"
+                      @onchange="ValidateJson">
+        @SelectedTab.Body
+              </textarea>
+            @if (!isValidJson)
+            {
+                <div class="text-danger">Invalid JSON</div>
+            }
+        </div>
+    }
+
+    <!-- Tests (now with syntax highlighting via CodeMirror) -->
+    <details class="mb-3">
+        <summary>Tests (auto-run on Send)</summary>
+        <div class="p-3 border rounded">
+            <div class="mb-3">
+                <label>Pre-Request Script (JS)</label>
+                <textarea class="form-control code-editor"
+                          @bind="SelectedTab.PreRequestTestJS"></textarea>
+                <pre class="mt-2">@SelectedTab.PreTestResults</pre>
+            </div>
+            <div class="mb-3">
+                <label>Post-Request Script (JS)</label>
+                <textarea class="form-control code-editor"
+                          @bind="SelectedTab.PostRequestTestJS"></textarea>
+                <pre class="mt-2">@SelectedTab.PostTestResults</pre>
+            </div>
+        </div>
+    </details>
+
+    <!-- Actions -->
+    <div class="mb-3">
+        <button class="btn btn-primary me-2" @onclick="SendRequest">
+            Send
+        </button>
+        <button class="btn btn-success me-2" @onclick="SaveRequest">
+            Save Request
+        </button>
+        <button class="btn btn-outline-secondary" @onclick="NewTab">
+            New Tab
+        </button>
+    </div>
+
+    <!-- Response -->
+    @if (SelectedTab.Response != null)
+    {
+        <div class="mt-4">
+            <h5>Response: @SelectedTab.Response.StatusCode</h5>
+            <pre>@ResponseBodies[SelectedTab]</pre>
+        </div>
+    }
+}
